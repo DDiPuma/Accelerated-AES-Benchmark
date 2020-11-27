@@ -38,12 +38,17 @@ void close_files(aes_file_t* p_input, aes_file_t* p_output)
 void print_usage_and_cleanup(aes_file_t* p_input, aes_file_t* p_output)
 {
     printf("Usage:\n");
-    printf("bench_<IMPLEMENTATION> <INPUT_FILENAME> <OUTPUT_FILENAME>\n");
+    printf("bench_<IMPLEMENTATION> <INPUT_FILENAME> <OUTPUT_FILENAME> [<THREAD_COUNT>]\n");
     printf("Notes:\n");
     printf("You must have permissions to read <INPUT_FILENAME>\n");
     printf("<INPUT_FILENAME> must be an integer multiple of 16 bytes\n");
     printf("You must have permissions to write <OUTPUT_FILENAME>\n");
     printf("<OUTPUT_FILENAME> will be overwritten\n");
+    printf("Thread count should allow blocks to divide evenly across threads\n");
+    printf("Also, the number of blocks per thread should allow for cache\n");
+    printf("    line alignment.  On x86_64 with DDR3, this means that each\n");
+    printf("    block should have a multiple of 64 bytes\n");
+    printf("\n");
 
     close_files(p_input, p_output);
     exit(-1);

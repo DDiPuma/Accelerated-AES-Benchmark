@@ -19,6 +19,10 @@
  *   if the key length and number of rounds are compile-time constants.
  */
 
+/* This is architecture and memory specific to some extent */
+#define CACHE_LINE_SIZE        64    /* 64 bytes */
+#define CACHE_LINE_SIZE_BLOCKS 4     /* 64 bytes */
+
 /* These apply to all AES lenghts */
 #define BITS_PER_BYTE 8
 #define BLOCK_SIZE 4                 /* in words */
@@ -83,5 +87,13 @@ typedef struct aes_file_t {
     size_t size_blocks;
     int fd;
 } aes_file_t;
-                         
+
+typedef struct thread_args_t {
+    aes_file_t* p_input;
+    aes_file_t* p_output;
+    key_schedule_t* p_key_sched;
+    size_t offset;
+    size_t count;
+} thread_args_t;
+
 #endif
