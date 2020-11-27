@@ -118,13 +118,13 @@ void MixColumns(block_vector_t* const p_state)
         
         // Perform matrix multiply
         p_state->x[col*WORD_SIZE  ] = GFMul(0x02, b[0]) ^ GFMul(0x03, b[1]) ^
-                                      GFMul(0x01, b[2]) ^ GFMul(0x01, b[3]);
-        p_state->x[col*WORD_SIZE+1] = GFMul(0x01, b[0]) ^ GFMul(0x02, b[1]) ^
-                                      GFMul(0x03, b[2]) ^ GFMul(0x01, b[3]);
-        p_state->x[col*WORD_SIZE+2] = GFMul(0x01, b[0]) ^ GFMul(0x01, b[1]) ^
+                                      b[2] ^ b[3];
+        p_state->x[col*WORD_SIZE+1] = b[0] ^ GFMul(0x02, b[1]) ^
+                                      GFMul(0x03, b[2]) ^ b[3];
+        p_state->x[col*WORD_SIZE+2] = b[0] ^ b[1] ^
                                       GFMul(0x02, b[2]) ^ GFMul(0x03, b[3]);
-        p_state->x[col*WORD_SIZE+3] = GFMul(0x03, b[0]) ^ GFMul(0x01, b[1]) ^
-                                      GFMul(0x01, b[2]) ^ GFMul(0x02, b[3]);
+        p_state->x[col*WORD_SIZE+3] = GFMul(0x03, b[0]) ^ b[1] ^
+                                      b[2] ^ GFMul(0x02, b[3]);
     }
 }
 
