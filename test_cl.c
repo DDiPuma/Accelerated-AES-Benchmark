@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "include/aes_cpu.h"
+#include "include/aes_cl.h"
+
+#include <CL/cl.h>
 
 /*
  * This is Appendix B of the FIPS AES spec to ensure that this is correct.
@@ -12,6 +14,34 @@
 
 int main(int argc, char** argv)
 {
+    // Set up the OpenCL environment
+    cl_platform_id platform;
+    clGetPlatformIDs(1, &platform, NULL);
+    cl_device_id_device;
+    clGetDeviceIDs(platform,
+                   CL_DEVICE_TYPE_GPU,
+                   1,
+                   &device,
+                   NULL);
+    cl_context context;
+    context = clCreateContect(NULL,
+                              1,
+                              &device,
+                              NULL,
+                              NULL,
+                              NULL);
+    cl_command_queue queue;
+    queue = clCreateCommandQueue(context,
+                                 device,
+                                 0,
+                                 NULL);
+    cl_program program;
+    program = clCreateProgramWithSource();
+    clBuildProgram(program, 1, &device, NULL, NULL, NULL);
+    cl_kernel kernel = clCreateKernel(program, aes, NULL);
+    
+    // TODO - the rest
+    
     // Perform setup
     block_vector_t input = { .x = {0x32, 0x43, 0xf6, 0xa8,
                                    0x88, 0x5a, 0x30, 0x8d,

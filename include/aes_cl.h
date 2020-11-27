@@ -1,5 +1,5 @@
-#ifndef AESCPU_H
-#define AESCPU_H
+#ifndef AESCL_H
+#define AESCL_H
 
 #include <arpa/inet.h>
 
@@ -142,6 +142,8 @@ void KeyExpansion(const aes_key_t* const p_key,
                   key_schedule_t* const p_key_sched)
 {
     // This makes the key unique at each round of encryption
+    
+    uint8_t round = 0;
     
     // Start with the key itself
     for (uint8_t word = 0; word < KEY_LENGTH; ++word)

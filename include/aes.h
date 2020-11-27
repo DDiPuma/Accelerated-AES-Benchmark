@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include <wmmintrin.h>
+
 /*
  * Code style notes:
  * - I'd rather use const than preprocessor defines. I had issues doing this
@@ -22,8 +24,10 @@
 #define BLOCK_SIZE 4                 /* in words */
 #define WORD_SIZE sizeof(uint32_t)   /* in bytes */
 #define KEY_LENGTH 4                 /* in words, AES-128 ONLY */
-typedef struct block_vector_t {
+typedef union block_vector_t {
     uint8_t x[WORD_SIZE*BLOCK_SIZE];
+    uint64_t quad[2];                /* to implement CTR mode */
+    __m128i i;
 } block_vector_t;
 
 /* These apply only to AES-128 */
@@ -31,10 +35,12 @@ typedef struct block_vector_t {
 typedef union key_schedule_t {
     uint8_t b[NUM_ROUNDS+1][BLOCK_SIZE*WORD_SIZE];
     uint32_t w[(NUM_ROUNDS+1)*BLOCK_SIZE];
+    __m128i i[NUM_ROUNDS+1];
 } key_schedule_t;
 typedef union aes_key_t {
     uint8_t b[KEY_LENGTH*WORD_SIZE];
     uint32_t w[KEY_LENGTH];
+    __m128i i;
 } aes_key_t;
 
 const uint8_t sbox[] = {

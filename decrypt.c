@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "include/aes_cpu.h"
+#include "include/aes_ni.h"
 #include "include/file_utils.h"
 
 int main(int argc, char** argv)
@@ -25,16 +25,13 @@ int main(int argc, char** argv)
     
     // Expand keys
     key_schedule_t key_sched;
-    KeyExpansion(&key, &key_sched);
+    InvKeyExpansion(&key, &key_sched);
 
-    // TODO - make this a pthread; break the loop up into N pieces (per argc)
-    
     // Perform encryption
     for (size_t block = 0; block < input.size_blocks; ++block)
     {
-        AesCipher128(&(input.p_data[block]),
-                     &(output.p_data[block]),
-                     &key_sched);
+        output.p_data[block].i = InvAesCipher128(input.p_data[block].i,
+                                                 &key_sched);
     }
     
     close_files(&input, &output);

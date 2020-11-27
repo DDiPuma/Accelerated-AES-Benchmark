@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "include/aes_cpu.h"
+#include "include/aes_ni.h"
 #include "include/file_utils.h"
 
 int main(int argc, char** argv)
@@ -32,9 +32,8 @@ int main(int argc, char** argv)
     // Perform encryption
     for (size_t block = 0; block < input.size_blocks; ++block)
     {
-        AesCipher128(&(input.p_data[block]),
-                     &(output.p_data[block]),
-                     &key_sched);
+        output.p_data[block].i = AesCipher128(input.p_data[block].i,
+                                              &key_sched);
     }
     
     close_files(&input, &output);
