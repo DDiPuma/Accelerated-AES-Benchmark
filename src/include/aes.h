@@ -21,6 +21,8 @@ typedef uint  uint32_t;
  *   with AES-192 and AES-256. This is partly for simplicity and partly for
  *   performance.  The compiler can do a better job of optimizing the program
  *   if the key length and number of rounds are compile-time constants.
+ * - OpenCL C doesn't support everything in this file, so it's masked out by
+ *   the preprocessor.
  */
 
 /* This is architecture and memory specific to some extent */

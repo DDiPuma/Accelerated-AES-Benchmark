@@ -31,10 +31,15 @@ __m128i AesCipher128(const __m128i input,
     __m128i state = input ^ p_key_sched->i[0];
 
     // The last round is a little different, so it is excluded
-    for (uint8_t round = 1; round < NUM_ROUNDS; ++round)
-    {
-        state = _mm_aesenc_si128(state, p_key_sched->i[round]);
-    }
+    state = _mm_aesenc_si128(state, p_key_sched->i[1]);
+    state = _mm_aesenc_si128(state, p_key_sched->i[2]);
+    state = _mm_aesenc_si128(state, p_key_sched->i[3]);
+    state = _mm_aesenc_si128(state, p_key_sched->i[4]);
+    state = _mm_aesenc_si128(state, p_key_sched->i[5]);
+    state = _mm_aesenc_si128(state, p_key_sched->i[6]);
+    state = _mm_aesenc_si128(state, p_key_sched->i[7]);
+    state = _mm_aesenc_si128(state, p_key_sched->i[8]);
+    state = _mm_aesenc_si128(state, p_key_sched->i[9]);
 
     // Perform the last round
     state = _mm_aesenclast_si128(state, p_key_sched->i[NUM_ROUNDS]);
