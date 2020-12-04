@@ -1,0 +1,10 @@
+bin/*
+input/*
+output/*
+
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.synctex.*
