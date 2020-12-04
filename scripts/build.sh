@@ -12,6 +12,8 @@ SRC_DIR="src"
 INCLUDE_DIR="src/include"
 BIN_DIR="bin"
 
+mkdir -p $BIN_DIR
+
 # Compile C programs
 for cfile in ${SRC_DIR}/*.c; do
   ${CC} ${CFLAGS} -I${INCLUDE_DIR} ${cfile} -o $(pwd)/${BIN_DIR}/$(basename -s .c ${cfile})
