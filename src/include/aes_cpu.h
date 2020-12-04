@@ -318,6 +318,9 @@ uint8_t GFMul(uint8_t a, uint8_t b)
     // The spec makes this unclear, so I used this site as a reference:
     // http://www.cs.utsa.edu/~wagner/laws/FFM.html
     
+    
+    // Long story short, this is a carryless multiply modulo 0x1b
+    
     uint8_t result = 0;
     
     while (a && b)
