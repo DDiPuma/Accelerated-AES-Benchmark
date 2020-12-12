@@ -24,5 +24,4 @@ head -c 128MiB /dev/urandom > input/128M.bin
 head -c 256MiB /dev/urandom > input/256M.bin
 head -c 512MiB /dev/urandom > input/512M.bin
 head -c 1GiB   /dev/urandom > input/1G.bin
-head -c 2GiB   /dev/urandom > input/2G.bin
 

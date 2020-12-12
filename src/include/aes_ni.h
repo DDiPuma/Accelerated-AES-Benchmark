@@ -28,21 +28,21 @@ __m128i InvAesCipher128(__m128i input,
 __m128i AesCipher128(const __m128i input,
                      const key_schedule_t* const p_key_sched)
 {
-    __m128i state = input ^ p_key_sched->i[0];
+    __m128i state = input ^ p_key_sched->k[0].i;
 
     // The last round is a little different, so it is excluded
-    state = _mm_aesenc_si128(state, p_key_sched->i[1]);
-    state = _mm_aesenc_si128(state, p_key_sched->i[2]);
-    state = _mm_aesenc_si128(state, p_key_sched->i[3]);
-    state = _mm_aesenc_si128(state, p_key_sched->i[4]);
-    state = _mm_aesenc_si128(state, p_key_sched->i[5]);
-    state = _mm_aesenc_si128(state, p_key_sched->i[6]);
-    state = _mm_aesenc_si128(state, p_key_sched->i[7]);
-    state = _mm_aesenc_si128(state, p_key_sched->i[8]);
-    state = _mm_aesenc_si128(state, p_key_sched->i[9]);
+    state = _mm_aesenc_si128(state, p_key_sched->k[1].i);
+    state = _mm_aesenc_si128(state, p_key_sched->k[2].i);
+    state = _mm_aesenc_si128(state, p_key_sched->k[3].i);
+    state = _mm_aesenc_si128(state, p_key_sched->k[4].i);
+    state = _mm_aesenc_si128(state, p_key_sched->k[5].i);
+    state = _mm_aesenc_si128(state, p_key_sched->k[6].i);
+    state = _mm_aesenc_si128(state, p_key_sched->k[7].i);
+    state = _mm_aesenc_si128(state, p_key_sched->k[8].i);
+    state = _mm_aesenc_si128(state, p_key_sched->k[9].i);
 
     // Perform the last round
-    state = _mm_aesenclast_si128(state, p_key_sched->i[NUM_ROUNDS]);
+    state = _mm_aesenclast_si128(state, p_key_sched->k[NUM_ROUNDS].i);
     
     return state;
 }
@@ -55,16 +55,16 @@ __m128i AesCipher128(const __m128i input,
 __m128i InvAesCipher128(const __m128i input,
                         const key_schedule_t* const p_key_sched)
 {
-    __m128i state = input ^ p_key_sched->i[NUM_ROUNDS];
+    __m128i state = input ^ p_key_sched->k[NUM_ROUNDS].i;
 
     // The last round is a little different, so it is excluded
     for (uint8_t round = NUM_ROUNDS-1; round > 0; --round)
     {
-        state = _mm_aesdec_si128(state, p_key_sched->i[round]);
+        state = _mm_aesdec_si128(state, p_key_sched->k[round].i);
     }
 
     // Perform the last round
-    state = _mm_aesdeclast_si128(state, p_key_sched->i[0]);
+    state = _mm_aesdeclast_si128(state, p_key_sched->k[0].i);
     
     return state;
 }
@@ -90,48 +90,48 @@ void KeyExpansion(const aes_key_t* const p_key,
     // Manipulate the key
     __m128i tmp1, tmp2;
     
-    tmp1 = _mm_loadu_si128((__m128i*) &(p_key->i[0]));
-    p_key_sched->i[0] = tmp1;
+    tmp1 = _mm_loadu_si128((__m128i*) &(p_key->i));
+    p_key_sched->k[0].i = tmp1;
     
     tmp2 = _mm_aeskeygenassist_si128(tmp1, 0x01);
     tmp1 = KeyExpansionAssist(tmp1, tmp2);
-    p_key_sched->i[1] = tmp1;
+    p_key_sched->k[1].i = tmp1;
     
     tmp2 = _mm_aeskeygenassist_si128(tmp1, 0x02);
     tmp1 = KeyExpansionAssist(tmp1, tmp2);
-    p_key_sched->i[2] = tmp1;
+    p_key_sched->k[2].i = tmp1;
     
     tmp2 = _mm_aeskeygenassist_si128(tmp1, 0x04);
     tmp1 = KeyExpansionAssist(tmp1, tmp2);
-    p_key_sched->i[3] = tmp1;
+    p_key_sched->k[3].i = tmp1;
     
     tmp2 = _mm_aeskeygenassist_si128(tmp1, 0x08);
     tmp1 = KeyExpansionAssist(tmp1, tmp2);
-    p_key_sched->i[4] = tmp1;
+    p_key_sched->k[4].i = tmp1;
     
     tmp2 = _mm_aeskeygenassist_si128(tmp1, 0x10);
     tmp1 = KeyExpansionAssist(tmp1, tmp2);
-    p_key_sched->i[5] = tmp1;
+    p_key_sched->k[5].i = tmp1;
     
     tmp2 = _mm_aeskeygenassist_si128(tmp1, 0x20);
     tmp1 = KeyExpansionAssist(tmp1, tmp2);
-    p_key_sched->i[6] = tmp1;
+    p_key_sched->k[6].i = tmp1;
     
     tmp2 = _mm_aeskeygenassist_si128(tmp1, 0x40);
     tmp1 = KeyExpansionAssist(tmp1, tmp2);
-    p_key_sched->i[7] = tmp1;
+    p_key_sched->k[7].i = tmp1;
     
     tmp2 = _mm_aeskeygenassist_si128(tmp1, 0x80);
     tmp1 = KeyExpansionAssist(tmp1, tmp2);
-    p_key_sched->i[8] = tmp1;
+    p_key_sched->k[8].i = tmp1;
     
     tmp2 = _mm_aeskeygenassist_si128(tmp1, 0x1b);
     tmp1 = KeyExpansionAssist(tmp1, tmp2);
-    p_key_sched->i[9] = tmp1;
+    p_key_sched->k[9].i = tmp1;
     
     tmp2 = _mm_aeskeygenassist_si128(tmp1, 0x36);
     tmp1 = KeyExpansionAssist(tmp1, tmp2);
-    p_key_sched->i[10] = tmp1;
+    p_key_sched->k[10].i = tmp1;
 }
 
 void InvKeyExpansion(const aes_key_t* const p_key,
@@ -141,7 +141,7 @@ void InvKeyExpansion(const aes_key_t* const p_key,
     
     for (uint8_t round = 1; round < NUM_ROUNDS; ++round)
     {
-        p_key_sched->i[round] = _mm_aesimc_si128(p_key_sched->i[round]);
+        p_key_sched->k[round].i = _mm_aesimc_si128(p_key_sched->k[round].i);
     }
 }
 

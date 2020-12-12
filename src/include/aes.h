@@ -34,30 +34,37 @@ typedef uint  uint32_t;
 #define BLOCK_SIZE 4                 /* in words */
 #define WORD_SIZE sizeof(uint32_t)   /* in bytes */
 #define KEY_LENGTH 4                 /* in words, AES-128 ONLY */
-typedef union block_vector_t {
-    uint8_t x[WORD_SIZE*BLOCK_SIZE];
-    uint32_t w[BLOCK_SIZE];
-#ifndef AES_CL
-    __m128i i;
-#endif
-} block_vector_t;
 
 /* These apply only to AES-128 */
 #define NUM_ROUNDS 10
-typedef union key_schedule_t {
-    uint8_t b[NUM_ROUNDS+1][BLOCK_SIZE*WORD_SIZE];
-    uint32_t w[(NUM_ROUNDS+1)*BLOCK_SIZE];
+
 #ifndef AES_CL
-    __m128i i[NUM_ROUNDS+1];
-#endif
-} key_schedule_t;
+
+typedef uint8_t u8x16 __attribute__ ((vector_size (16)));
+typedef union block_vector_t {
+    uint8_t  x[WORD_SIZE*BLOCK_SIZE];
+    uint32_t w[BLOCK_SIZE];
+    __m128i  i;
+    u8x16    vec;
+} block_vector_t;
 typedef union aes_key_t {
-    uint8_t b[KEY_LENGTH*WORD_SIZE];
+    uint8_t  b[KEY_LENGTH*WORD_SIZE];
     uint32_t w[KEY_LENGTH];
-#ifndef AES_CL
-    __m128i i;
-#endif
+    __m128i  i;
 } aes_key_t;
+typedef struct key_schedule_t {
+    aes_key_t k[NUM_ROUNDS+1];
+} key_schedule_t;
+
+#else
+
+typedef uchar16 block_vector_t;
+typedef uchar16 aes_key_t;
+typedef struct key_schedule_t {
+    aes_key_t k[NUM_ROUNDS+1];
+} key_schedule_t;
+
+#endif
 
 #ifndef AES_CL
 const uint8_t sbox[256] = {

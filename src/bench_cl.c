@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#define CL_TARGET_OPENCL_VERSION 220
+
 #include <CL/cl.h>
 
 #include "include/aes_cpu.h"   // For KeyExpansion
@@ -116,7 +118,7 @@ int main(int argc, char** argv)
     // Copy inputs to OpenCL
     clEnqueueWriteBuffer(queue,
                          d_input,
-                         CL_TRUE,
+                         CL_FALSE,
                          0,
                          input.size_blocks*sizeof(block_vector_t),
                          input.p_data,
@@ -125,7 +127,7 @@ int main(int argc, char** argv)
                          NULL);
     clEnqueueWriteBuffer(queue,
                          d_key_schedule,
-                         CL_TRUE,
+                         CL_FALSE,
                          0,
                          sizeof(key_sched),
                          &key_sched,

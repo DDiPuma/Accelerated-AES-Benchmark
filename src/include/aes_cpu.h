@@ -19,11 +19,15 @@ void SubBytes(block_vector_t* const p_state);
 void ShiftRows(block_vector_t* const p_state);
 void MixColumns(block_vector_t* const p_state);
 void AddRoundKey(block_vector_t* const p_state,
-                 const key_schedule_t* const p_keys,
-                 const uint8_t round);
+                 const aes_key_t* const p_key);
 void AesCipher128(const block_vector_t* const p_input,
                   block_vector_t* const p_output,
                   const key_schedule_t* const p_key_sched);
+
+const u8x16 shift_rows_mask = {0,  5,  10, 15,
+                               4,  9,  14, 3,
+                               8,  13, 2,  7,
+                               12, 1,  6,  11};
 
 /*
  * Precondition: p_key_sched should be initialized with KeyExpansion
@@ -38,7 +42,7 @@ void AesCipher128(const block_vector_t* const p_input,
     
     memcpy(state.x, p_input->x, sizeof(state));
     
-    AddRoundKey(&state, p_key_sched, 0);
+    AddRoundKey(&state, &(p_key_sched->k[0]));
 
     // Manually unrolled loop
     // Disassembled output did not suggest unrolling by compiler
@@ -47,60 +51,60 @@ void AesCipher128(const block_vector_t* const p_input,
     SubBytes(&state);
     ShiftRows(&state);
     MixColumns(&state);
-    AddRoundKey(&state, p_key_sched, 1);
+    AddRoundKey(&state, &(p_key_sched->k[1]));
     
     // Round 2
     SubBytes(&state);
     ShiftRows(&state);
     MixColumns(&state);
-    AddRoundKey(&state, p_key_sched, 2);
+    AddRoundKey(&state, &(p_key_sched->k[2]));
     
     // Round 3
     SubBytes(&state);
     ShiftRows(&state);
     MixColumns(&state);
-    AddRoundKey(&state, p_key_sched, 3);
+    AddRoundKey(&state, &(p_key_sched->k[3]));
     
     // Round 4
     SubBytes(&state);
     ShiftRows(&state);
     MixColumns(&state);
-    AddRoundKey(&state, p_key_sched, 4);
+    AddRoundKey(&state, &(p_key_sched->k[4]));
     
     // Round 5
     SubBytes(&state);
     ShiftRows(&state);
     MixColumns(&state);
-    AddRoundKey(&state, p_key_sched, 5);
+    AddRoundKey(&state, &(p_key_sched->k[5]));
     
     // Round 6
     SubBytes(&state);
     ShiftRows(&state);
     MixColumns(&state);
-    AddRoundKey(&state, p_key_sched, 6);
+    AddRoundKey(&state, &(p_key_sched->k[6]));
 
     // Round 7
     SubBytes(&state);
     ShiftRows(&state);
     MixColumns(&state);
-    AddRoundKey(&state, p_key_sched, 7);
+    AddRoundKey(&state, &(p_key_sched->k[7]));
     
     // Round 8
     SubBytes(&state);
     ShiftRows(&state);
     MixColumns(&state);
-    AddRoundKey(&state, p_key_sched, 8);
+    AddRoundKey(&state, &(p_key_sched->k[8]));
     
     // Round 9
     SubBytes(&state);
     ShiftRows(&state);
     MixColumns(&state);
-    AddRoundKey(&state, p_key_sched, 9);
+    AddRoundKey(&state, &(p_key_sched->k[9]));
     
     // Round 10 (no MixColumns for last round)
     SubBytes(&state);
     ShiftRows(&state);
-    AddRoundKey(&state, p_key_sched, 10);
+    AddRoundKey(&state, &(p_key_sched->k[10]));
 
     memcpy(p_output->x, state.x, sizeof(state));
 }
@@ -133,33 +137,7 @@ void SubBytes(block_vector_t* const p_state)
 
 void ShiftRows(block_vector_t* const p_state)
 {
-    uint8_t tmp_byte1, tmp_byte2, tmp_byte3;
-
-    // Do nothing to the first row
-    
-    // Shift the second row by 1
-    tmp_byte1      = p_state->x[1];
-    p_state->x[1]  = p_state->x[5];
-    p_state->x[5]  = p_state->x[9];
-    p_state->x[9]  = p_state->x[13];
-    p_state->x[13] = tmp_byte1;
-
-    // Shift the second row by 2
-    tmp_byte1      = p_state->x[2];
-    tmp_byte2      = p_state->x[6];
-    p_state->x[2]  = p_state->x[10];
-    p_state->x[6]  = p_state->x[14];
-    p_state->x[10] = tmp_byte1;
-    p_state->x[14] = tmp_byte2;
-
-    // Shift the third row by 3
-    tmp_byte1      = p_state->x[3];
-    tmp_byte2      = p_state->x[7];
-    tmp_byte3      = p_state->x[11];
-    p_state->x[3]  = p_state->x[15];
-    p_state->x[7]  = tmp_byte1;
-    p_state->x[11] = tmp_byte2;
-    p_state->x[15] = tmp_byte3;
+    p_state->vec = __builtin_shuffle(p_state->vec, shift_rows_mask);
 }
 
 void MixColumns(block_vector_t* const p_state)
@@ -239,25 +217,9 @@ void MixColumns(block_vector_t* const p_state)
 }
 
 void AddRoundKey(block_vector_t* const p_state,
-                 const key_schedule_t* const p_key_sched,
-                 const uint8_t round)
+                 const aes_key_t* const p_key)
 {
-    p_state->x[0] ^= p_key_sched->b[round][0];
-    p_state->x[1] ^= p_key_sched->b[round][1];
-    p_state->x[2] ^= p_key_sched->b[round][2];
-    p_state->x[3] ^= p_key_sched->b[round][3];
-    p_state->x[4] ^= p_key_sched->b[round][4];
-    p_state->x[5] ^= p_key_sched->b[round][5];
-    p_state->x[6] ^= p_key_sched->b[round][6];
-    p_state->x[7] ^= p_key_sched->b[round][7];
-    p_state->x[8] ^= p_key_sched->b[round][8];
-    p_state->x[9] ^= p_key_sched->b[round][9];
-    p_state->x[10] ^= p_key_sched->b[round][10];
-    p_state->x[11] ^= p_key_sched->b[round][11];
-    p_state->x[12] ^= p_key_sched->b[round][12];
-    p_state->x[13] ^= p_key_sched->b[round][13];
-    p_state->x[14] ^= p_key_sched->b[round][14];
-    p_state->x[15] ^= p_key_sched->b[round][15];
+    p_state->i ^= p_key->i;
 }
 
 void KeyExpansion(const aes_key_t* const p_key,
@@ -266,25 +228,33 @@ void KeyExpansion(const aes_key_t* const p_key,
     // This makes the key unique at each round of encryption
     
     // Start with the key itself
+    // The operations from the spec work in big endian byte order
     for (uint8_t word = 0; word < KEY_LENGTH; ++word)
     {
-        p_key_sched->w[word] = htonl(p_key->w[word]);
+        p_key_sched->k[0].w[word] = htonl(p_key->w[word]);
     }
     
     // Manipulate the key for future rounds
+    uint32_t* const p_key_sched_words = (uint32_t* const) p_key_sched;
     for (uint8_t i = KEY_LENGTH; i < (NUM_ROUNDS+1)*BLOCK_SIZE; ++i)
     {
-        uint32_t temp = p_key_sched->w[i-1];
+        // Take previous word
+        uint32_t temp = p_key_sched_words[i-1];
+        
+        // First word of a new round gets transformed
         if (i % KEY_LENGTH == 0)
         {
             temp = SubWord(RotWord(temp)) ^ Rcon[i/KEY_LENGTH];
         }
-        p_key_sched->w[i] = p_key_sched->w[i-KEY_LENGTH] ^ temp;
+        
+        // XOR this round's i-th word with previous round's i-th word
+        p_key_sched_words[i] = p_key_sched_words[i-KEY_LENGTH] ^ temp;
     }
     
+    // Convert back to system byte order
     for (uint8_t i = 0; i < (NUM_ROUNDS+1)*BLOCK_SIZE; ++i)
     {
-        p_key_sched->w[i] = ntohl(p_key_sched->w[i]);
+        p_key_sched_words[i] = ntohl(p_key_sched_words[i]);
     }
 }
 
@@ -307,6 +277,7 @@ uint32_t RotWord(uint32_t in)
 {
     // This is part of the key expansion process
     // Just rotate the lower 24 bits up, and the upper 8 bits down
+    // Endianness makes this look backwards
     return (in << 8 | in >> 24);
     
 }

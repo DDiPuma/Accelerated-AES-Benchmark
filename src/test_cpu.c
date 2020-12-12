@@ -35,7 +35,7 @@ int main(int argc, char** argv)
                                                  0xa0, 0xf4, 0xe2, 0x2b,
                                                  0x9a, 0xc6, 0x8d, 0x2a,
                                                  0xe9, 0xf8, 0x48, 0x08}};
-    AddRoundKey(&input, &key_sched, 0);
+    AddRoundKey(&input, &(key_sched.k[0]));
     for (uint8_t byte = 0; byte < sizeof(input); ++byte)
     {
         if (input.x[byte] != valid_state1.x[byte])
@@ -99,14 +99,14 @@ int main(int argc, char** argv)
                                                  0x68, 0x9f, 0x35, 0x2b,
                                                  0x6b, 0x5b, 0xea, 0x43,
                                                  0x02, 0x6a, 0x50, 0x49}};
-    AddRoundKey(&input, &key_sched, 1);
+    AddRoundKey(&input, &(key_sched.k[1]));
     for (uint8_t byte = 0; byte < sizeof(input); ++byte)
     {
         if (input.x[byte] != valid_state5.x[byte])
         {
             printf("After first AddRoundKey, expected byte %hhu to be 0x%hhx, but got 0x%hhx\n",
                    byte, valid_state5.x[byte], input.x[byte]);
-            printf("Round key was: 0x%hhx\n", key_sched.b[byte]);
+            printf("Round key was: 0x%hhx\n", key_sched.k[1].b[byte]);
             exit(-1);
         }
     }
