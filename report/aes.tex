@@ -1,4 +1,6 @@
 \documentclass[a4paper,10pt,conference]{IEEEtran}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 \usepackage{amsmath}
 \usepackage{float}
 \usepackage{graphicx}
@@ -16,11 +18,11 @@
 
 \section{Introduction}
 
-In recent years, encryption has become ubiquitous.  Smartphones and personal computers are often fully encrypted by default, and cryptography is being applied in new ways, such as for cryptocurrencies.  As a result, GPU, FPGA, and ASIC-accelerated cryptographic implementations are in focus.  On modern x86 and ARM processors, there are instructions to accelerate the advanced encryption standard (AES) algorithm.  This paper will describe the AES algorithm in enough detail to implement it, and then study three implementations of the algorithm: a naive software implementation written in C; a C implementation using compiler intrinsics for the Intel AES instructions; and an Open Computer Library (OpenCL) implementation targeted at GPUs.  Each of the implementations will be profiled for their performance.
+In recent years, encryption has become ubiquitous.  Smartphones and personal computers are often fully encrypted by default, and cryptography is being applied in new ways, such as for cryptocurrencies.  As a result, GPU, FPGA, and ASIC-accelerated cryptographic implementations are in focus.  On modern x86 and ARM processors, there are instructions to accelerate the advanced encryption standard (AES) algorithm.  This paper will describe the AES algorithm in enough detail to implement it, and then study three implementations of the algorithm: a naive software implementation written in C; a C implementation using compiler intrinsics for the Intel AES instructions; and an Open Compute Library (OpenCL) implementation targeted at GPUs.  Each of the implementations will be profiled for their performance.
 
 \section{Technical Background}
 
-AES is an encryption standard that was approved and published by the US government in the early 2000's.  Since it a government-backed standard, it has been thoroughly researched and documented, and hardware implementations are even available in consumer electronics.  As such, it makes for an interesting case study in hardware acceleration.
+AES is an encryption standard that was approved and published by the US government in the early 2000's.  Since it is a government-backed standard, it is thoroughly documented, and hardware implementations are even available in consumer electronics.  As such, it makes for an interesting case study in hardware acceleration.
 
 From an implementation perspective, the AES algorithm is relatively simple.  At a high level, the algorithm has only a few elements:
 \begin{itemize}
@@ -36,20 +38,32 @@ Additionally, the AES specification supports three different key lengths: 128-bi
 
 \subsection{AES Encryption Algorithm}
 
-% TODO - format pseudocode
 Given a 128-bit block and the fully expanded key schedule (key expansion is described below), the AES algorithm consists of the following\cite{nist}:
 
-AddRoundKey
+\begin{algorithm}
+\caption{AES-128 Encryption}
+\begin{algorithmic}[1]
+\Function{AesEncrypt128}{$input$, $output$, $key$}
 
-K-1 rounds:
-    SubBytes
-    ShiftRows
-    MixColumns
-    AddRoundKey
+\State $state\gets$ \Call{AddRoundKey}{$input$, $key$, $0$}
 
-SubBytes
-ShiftRows
-AddRoundKey
+\State $round\gets 1$
+\While{$round\leq 9$}
+    \State $state\gets$ \Call{SubBytes}{$state$}
+    \State $state\gets$ \Call{ShiftRows}{$state$}
+    \State $state\gets$ \Call{MixColumns}{$state$}
+    \State $state\gets$ \Call{AddRoundKey}{$state$, $key$, $round$}
+    \State $round\gets round + 1$
+\EndWhile
+
+\State $state\gets$ \Call{SubBytes}{$state$}
+\State $state\gets$ \Call{ShiftRows}{$state$}
+\State $state\gets$ \Call{AddRoundKey}{$state$, $key$, $10$}
+
+\State \Return $state$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
 
 The initial block can be viewed as a 4-by-4 matrix, where $A$ is a 16-byte array as in \ref{block}.
 
@@ -322,7 +336,7 @@ Benchmark executables were developed to run each AES implementation.  These prog
 
 The software-only C and AES-NI accelerated C programs use POSIX threads (i.e. pthreads) to achieve parallelism.  Each thread runs a for-loop that encrypts one block per iteration.  Instead of using mutexes or any other synchronization method, the input and output files are broken up along cache line boundaries.  Since each cache line is accessed from only one thread, there are no data hazards, and synchronization is completely unnecessary.  Another benefit of this approach is that each thread is assigned a continuous span of memory, which improves data locality and therefore should improve the cache performance of the benchmark program.
 
-The OpenCL version of the code performs some ``boilerplate'' OpenCL setup, including querying the system for devices and creating a context.  Afterwards, it loads a pre-compiled program onto the GPU, sets it up as a kernel, copies data from the input file to the GPU.  The encryption is placed on the GPU's queue, and once it completes execution, the outputs are copied back to the CPU to be stored.  OpenCL does not require any special considerations to be made to prevent data hazards.
+The OpenCL version of the code performs some boilerplate OpenCL setup, including querying the system for devices and creating a context.  Afterwards, it loads a pre-compiled program onto the GPU, sets it up as a kernel, copies data from the input file to the GPU.  The encryption is placed on the GPU's queue, and once it completes execution, the outputs are copied back to the CPU to be stored.  OpenCL does not require any special considerations to be made to prevent data hazards.
 
 \subsection{Scripts to Reproduce Output}
 
