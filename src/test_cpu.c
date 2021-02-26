@@ -118,7 +118,7 @@ int main(int argc, char** argv)
                                               0xdc, 0x11, 0x85, 0x97,
                                               0x19, 0x6a, 0x0b, 0x32}};
     block_vector_t output;
-    AesCipher128(&input_copy, &output, &key_sched);
+    AesCipher128(&input_copy, &output, &key_sched, 0);
     for (uint8_t byte = 0; byte < sizeof(input); ++byte)
     {
         if (output.x[byte] != cipher_text.x[byte])

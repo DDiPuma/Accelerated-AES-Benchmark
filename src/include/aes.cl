@@ -19,12 +19,17 @@ __constant uchar16 shift_rows_mask = {0,  5,  10, 15,
  */
 __kernel void AesCipher128(__constant block_vector_t* p_inputs, 
                            __global block_vector_t* p_outputs,
-                           __global const key_schedule_t* p_key_sched)
+                           __global const key_schedule_t* p_key_sched,
+                           uint64_t idx_offset)
 {
-    int idx = get_global_id(0);
+    size_t idx = get_global_id(0);
+    
+    counter_t counter;
+    counter.as_scalar[0] = idx + idx_offset;
+    counter.as_scalar[1] = idx + idx_offset;
     
     // Copy data into GPU private address space
-    block_vector_t state = p_inputs[idx];
+    block_vector_t state = p_inputs[idx] ^ counter.as_vector;
     key_schedule_t key_sched = *p_key_sched;
     
     AddRoundKey(&state, &(key_sched.k[0]));

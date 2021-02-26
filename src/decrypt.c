@@ -31,7 +31,8 @@ int main(int argc, char** argv)
     for (size_t block = 0; block < input.size_blocks; ++block)
     {
         output.p_data[block].i = InvAesCipher128(input.p_data[block].i,
-                                                 &key_sched);
+                                                 &key_sched,
+                                                 block);
     }
     
     close_files(&input, &output);

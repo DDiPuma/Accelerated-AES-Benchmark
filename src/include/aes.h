@@ -7,6 +7,7 @@
 #else
 typedef uchar uint8_t;
 typedef uint  uint32_t;
+typedef ulong uint64_t;
 #endif
 
 /*
@@ -63,7 +64,10 @@ typedef uchar16 aes_key_t;
 typedef struct key_schedule_t {
     aes_key_t k[NUM_ROUNDS+1];
 } key_schedule_t;
-
+typedef union counter_t {
+    aes_key_t as_vector;
+    size_t as_scalar[2];
+} counter_t;
 #endif
 
 #ifndef AES_CL

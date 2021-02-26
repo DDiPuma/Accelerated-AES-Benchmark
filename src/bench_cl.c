@@ -97,16 +97,33 @@ int main(int argc, char** argv)
     // Expand keys
     key_schedule_t key_sched;
     KeyExpansion(&key, &key_sched);
-
+    
+    // The maximum memory allocation provides an upper limit on the
+    // amount of operations which can be done in a single batch
+    cl_ulong max_alloc_bytes;
+    clGetDeviceInfo(device,
+                    CL_DEVICE_MAX_MEM_ALLOC_SIZE,
+                    sizeof(max_alloc_bytes),
+                    &max_alloc_bytes,
+                    NULL);
+    size_t max_alloc_blocks = max_alloc_bytes /
+                              sizeof(block_vector_t);
+    
+    // Allocate only as much memory as we need or are allowed to
+    size_t alloc_size_blocks = 
+        input.size_blocks < max_alloc_blocks ?
+        input.size_blocks :
+        max_alloc_blocks;
+    
     // Set up memory for OpenCL
     cl_mem d_input = clCreateBuffer(context,
                                     CL_MEM_READ_ONLY,
-                                    input.size_blocks*sizeof(block_vector_t),
+                                    alloc_size_blocks*sizeof(block_vector_t),
                                     NULL,
                                     NULL);
     cl_mem d_output = clCreateBuffer(context,
                                      CL_MEM_WRITE_ONLY,
-                                     input.size_blocks*sizeof(block_vector_t),
+                                     alloc_size_blocks*sizeof(block_vector_t),
                                      NULL,
                                      NULL);
     cl_mem d_key_schedule = clCreateBuffer(context,
@@ -115,16 +132,7 @@ int main(int argc, char** argv)
                                            NULL,
                                            NULL);
 
-    // Copy inputs to OpenCL
-    clEnqueueWriteBuffer(queue,
-                         d_input,
-                         CL_FALSE,
-                         0,
-                         input.size_blocks*sizeof(block_vector_t),
-                         input.p_data,
-                         0,
-                         NULL,
-                         NULL);
+    // Only need to write the key schedule one time
     clEnqueueWriteBuffer(queue,
                          d_key_schedule,
                          CL_FALSE,
@@ -135,34 +143,56 @@ int main(int argc, char** argv)
                          NULL,
                          NULL);
     
-    // Provide arguments to kernel
-    clSetKernelArg(kernel, 0, sizeof(cl_mem), &d_input);
-    clSetKernelArg(kernel, 1, sizeof(cl_mem), &d_output);
-    clSetKernelArg(kernel, 2, sizeof(cl_mem), &d_key_schedule);
+    uint64_t current_offset_blocks = 0;
+    while (current_offset_blocks < input.size_blocks)
+    {
+        size_t operation_size =
+            input.size_blocks - current_offset_blocks < max_alloc_blocks ?
+            input.size_blocks - current_offset_blocks :
+            max_alloc_blocks;
+        
+        // Copy batch-specific input to OpenCL
+        clEnqueueWriteBuffer(queue,
+                             d_input,
+                             CL_FALSE,
+                             0,
+                             operation_size*sizeof(block_vector_t),
+                             input.p_data + current_offset_blocks,
+                             0,
+                             NULL,
+                             NULL);
+        
+        // Provide arguments to kernel
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &d_input);
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &d_output);
+        clSetKernelArg(kernel, 2, sizeof(cl_mem), &d_key_schedule);
+        clSetKernelArg(kernel, 3, sizeof(uint64_t), &current_offset_blocks);
 
-    // Run the kernel
-    clEnqueueNDRangeKernel(queue,
-                           kernel,
-                           1,
-                           NULL,
-                           &input.size_blocks,
-                           NULL,
-                           0,
-                           NULL,
-                           NULL);
-    
-    clFinish(queue);
-    
-    // Read outputs back to host
-    clEnqueueReadBuffer(queue,
-                        d_output,
-                        CL_TRUE, // Block
-                        0,
-                        input.size_blocks*sizeof(block_vector_t),
-                        output.p_data,
-                        0,
-                        NULL,
-                        NULL);
+        // Run the kernel
+        clEnqueueNDRangeKernel(queue,
+                            kernel,
+                            1,
+                            NULL,
+                            &alloc_size_blocks,
+                            NULL,
+                            0,
+                            NULL,
+                            NULL);
+        clFinish(queue);
+        
+        // Read outputs back to host
+        clEnqueueReadBuffer(queue,
+                            d_output,
+                            CL_TRUE, // Block here to avoid collisions
+                            0,
+                            operation_size*sizeof(block_vector_t),
+                            output.p_data + current_offset_blocks,
+                            0,
+                            NULL,
+                            NULL);
+
+        current_offset_blocks += alloc_size_blocks;
+    }
     
     // Cleanup
     clReleaseMemObject(d_input);

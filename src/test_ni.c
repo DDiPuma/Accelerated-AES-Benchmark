@@ -32,7 +32,7 @@ int main(int argc, char** argv)
                                               0xdc, 0x11, 0x85, 0x97,
                                               0x19, 0x6a, 0x0b, 0x32}};
     block_vector_t output;
-    output.i = AesCipher128(input.i, &key_sched);
+    output.i = AesCipher128(input.i, &key_sched, 0);
     for (uint8_t byte = 0; byte < sizeof(input); ++byte)
     {
         if (output.x[byte] != cipher_text.x[byte])
@@ -48,7 +48,7 @@ int main(int argc, char** argv)
     InvKeyExpansion(&key, &key_sched);
     
     block_vector_t decrypted;
-    decrypted.i = InvAesCipher128(cipher_text.i, &key_sched);
+    decrypted.i = InvAesCipher128(cipher_text.i, &key_sched, 0);
     for (uint8_t byte = 0; byte < sizeof(cipher_text); ++byte)
     {
         if (decrypted.x[byte] != input.x[byte])

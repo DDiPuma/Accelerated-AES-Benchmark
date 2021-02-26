@@ -15,10 +15,12 @@ void KeyExpansion(const aes_key_t* const p_key,
                   key_schedule_t* const p_key_sched);
 
 __m128i AesCipher128(__m128i input,
-                     const key_schedule_t* const p_key_sched);
+                     const key_schedule_t* const p_key_sched,
+                     const size_t counter);
 
 __m128i InvAesCipher128(__m128i input,
-                        const key_schedule_t* const p_key_sched);
+                        const key_schedule_t* const p_key_sched,
+                        const size_t counter);
 
 /*
  * Precondition: p_key_sched should be initialized with KeyExpansion
@@ -26,10 +28,11 @@ __m128i InvAesCipher128(__m128i input,
  *               the same for every 128-bit block.
  */
 __m128i AesCipher128(const __m128i input,
-                     const key_schedule_t* const p_key_sched)
+                     const key_schedule_t* const p_key_sched,
+                     const size_t counter)
 {
-    __m128i state = input ^ p_key_sched->k[0].i;
-
+    __m128i state = input ^ counter ^ p_key_sched->k[0].i;
+    
     // The last round is a little different, so it is excluded
     state = _mm_aesenc_si128(state, p_key_sched->k[1].i);
     state = _mm_aesenc_si128(state, p_key_sched->k[2].i);
@@ -53,10 +56,11 @@ __m128i AesCipher128(const __m128i input,
  *               the same for every 128-bit block.
  */
 __m128i InvAesCipher128(const __m128i input,
-                        const key_schedule_t* const p_key_sched)
+                        const key_schedule_t* const p_key_sched,
+                        const size_t counter)
 {
     __m128i state = input ^ p_key_sched->k[NUM_ROUNDS].i;
-
+    
     // The last round is a little different, so it is excluded
     for (uint8_t round = NUM_ROUNDS-1; round > 0; --round)
     {
@@ -64,7 +68,13 @@ __m128i InvAesCipher128(const __m128i input,
     }
 
     // Perform the last round
-    state = _mm_aesdeclast_si128(state, p_key_sched->k[0].i);
+    state = _mm_aesdeclast_si128(state, p_key_sched->k[0].i) ^ counter;
+    
+    char* p_counter = (char*) &counter;
+    
+    printf("CTR %hhx,%hhx,%hhx,%hhx,%hhx,%hhx,%hhx,%hhx\n",
+           p_counter[0], p_counter[1], p_counter[2], p_counter[3],
+           p_counter[4], p_counter[5], p_counter[6], p_counter[7]);
     
     return state;
 }

@@ -22,7 +22,8 @@ void AddRoundKey(block_vector_t* const p_state,
                  const aes_key_t* const p_key);
 void AesCipher128(const block_vector_t* const p_input,
                   block_vector_t* const p_output,
-                  const key_schedule_t* const p_key_sched);
+                  const key_schedule_t* const p_key_sched,
+                  const size_t counter);
 
 const u8x16 shift_rows_mask = {0,  5,  10, 15,
                                4,  9,  14, 3,
@@ -36,11 +37,15 @@ const u8x16 shift_rows_mask = {0,  5,  10, 15,
  */
 void AesCipher128(const block_vector_t* const p_input, 
                   block_vector_t* const p_output,
-                  const key_schedule_t* const p_key_sched)
+                  const key_schedule_t* const p_key_sched,
+                  const size_t counter)
 {
     block_vector_t state;
     
     memcpy(state.x, p_input->x, sizeof(state));
+    
+    // Add in the counter
+    state.i ^= counter; 
     
     AddRoundKey(&state, &(p_key_sched->k[0]));
 

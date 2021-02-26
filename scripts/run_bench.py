@@ -29,6 +29,8 @@ FILE_SIZES: Dict[str, int] = {
     "256M": 2**28,
     "512M": 2**29,
     "1G": 2**30,
+    "2G": 2**31,
+    "4G": 2**33,
     }
 
 PROGRAMS: List[str] = ["bench_cpu", "bench_cl", "bench_ni"]

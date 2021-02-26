@@ -20,7 +20,8 @@ void* encrypt(void* pv_args)
     {
         AesCipher128(&(p_input->p_data[block]),
                      &(p_output->p_data[block]),
-                     p_key_sched);
+                     p_key_sched,
+                     block);
     }
     
     return NULL;
