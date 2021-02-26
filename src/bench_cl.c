@@ -1,4 +1,3 @@
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -95,23 +94,9 @@ int main(int argc, char** argv)
                             0xab, 0xf7, 0x15, 0x88,
                             0x09, 0xcf, 0x4f, 0x3c}};
     
-    // Expand keys and provide them to OpenCL
+    // Expand keys
     key_schedule_t key_sched;
     KeyExpansion(&key, &key_sched);
-    cl_mem d_key_schedule = clCreateBuffer(context,
-                                           CL_MEM_READ_ONLY,
-                                           sizeof(key_sched),
-                                           NULL,
-                                           NULL);
-    clEnqueueWriteBuffer(queue,
-                         d_key_schedule,
-                         CL_FALSE,
-                         0,
-                         sizeof(key_sched),
-                         &key_sched,
-                         0,
-                         NULL,
-                         NULL);
     
     // The maximum memory allocation provides an upper limit on the
     // amount of operations which can be done in a single batch
@@ -123,6 +108,7 @@ int main(int argc, char** argv)
                     NULL);
     size_t max_alloc_blocks = max_alloc_bytes /
                               sizeof(block_vector_t);
+    
     // Allocate only as much memory as we need or are allowed to
     size_t alloc_size_blocks = 
         input.size_blocks < max_alloc_blocks ?
@@ -130,16 +116,35 @@ int main(int argc, char** argv)
         max_alloc_blocks;
     
     // Set up memory for OpenCL
-    size_t num_batches = (size_t) ceil((float) input.size_blocks /
-                                       (float) alloc_size_blocks);
-    printf("%lu batches\n", num_batches);
-    exit(1);
+    cl_mem d_input = clCreateBuffer(context,
+                                    CL_MEM_READ_ONLY,
+                                    alloc_size_blocks*sizeof(block_vector_t),
+                                    NULL,
+                                    NULL);
+    cl_mem d_output = clCreateBuffer(context,
+                                     CL_MEM_WRITE_ONLY,
+                                     alloc_size_blocks*sizeof(block_vector_t),
+                                     NULL,
+                                     NULL);
+    cl_mem d_key_schedule = clCreateBuffer(context,
+                                           CL_MEM_READ_ONLY,
+                                           sizeof(key_sched),
+                                           NULL,
+                                           NULL);
 
-    cl_mem* d_inputs = malloc(num_batches*sizeof(cl_mem));
-    cl_mem* d_outputs = malloc(num_batches*sizeof(cl_mem));
+    // Only need to write the key schedule one time
+    clEnqueueWriteBuffer(queue,
+                         d_key_schedule,
+                         CL_FALSE,
+                         0,
+                         sizeof(key_sched),
+                         &key_sched,
+                         0,
+                         NULL,
+                         NULL);
     
     uint64_t current_offset_blocks = 0;
-    for (size_t batch = 0; batch < num_batches; ++batch)
+    while (current_offset_blocks < input.size_blocks)
     {
         size_t operation_size =
             input.size_blocks - current_offset_blocks < max_alloc_blocks ?
@@ -147,18 +152,8 @@ int main(int argc, char** argv)
             max_alloc_blocks;
         
         // Copy batch-specific input to OpenCL
-        d_inputs[batch] = clCreateBuffer(context,
-                                         CL_MEM_READ_ONLY,
-                                         operation_size*sizeof(block_vector_t),
-                                         NULL,
-                                         NULL);
-        d_outputs[batch] = clCreateBuffer(context,
-                                          CL_MEM_WRITE_ONLY,
-                                          operation_size*sizeof(block_vector_t),
-                                          NULL,
-                                          NULL);
         clEnqueueWriteBuffer(queue,
-                             d_inputs[batch],
+                             d_input,
                              CL_FALSE,
                              0,
                              operation_size*sizeof(block_vector_t),
@@ -168,26 +163,27 @@ int main(int argc, char** argv)
                              NULL);
         
         // Provide arguments to kernel
-        clSetKernelArg(kernel, 0, sizeof(cl_mem), &d_inputs[batch]);
-        clSetKernelArg(kernel, 1, sizeof(cl_mem), &d_outputs[batch]);
+        clSetKernelArg(kernel, 0, sizeof(cl_mem), &d_input);
+        clSetKernelArg(kernel, 1, sizeof(cl_mem), &d_output);
         clSetKernelArg(kernel, 2, sizeof(cl_mem), &d_key_schedule);
         clSetKernelArg(kernel, 3, sizeof(uint64_t), &current_offset_blocks);
 
         // Run the kernel
         clEnqueueNDRangeKernel(queue,
-                               kernel,
-                               1,
-                               NULL,
-                               &operation_size,
-                               NULL,
-                               0,
-                               NULL,
-                               NULL);
+                            kernel,
+                            1,
+                            NULL,
+                            &alloc_size_blocks,
+                            NULL,
+                            0,
+                            NULL,
+                            NULL);
+        clFinish(queue);
         
         // Read outputs back to host
         clEnqueueReadBuffer(queue,
-                            d_outputs[batch],
-                            CL_FALSE, // Block here to avoid collisions
+                            d_output,
+                            CL_TRUE, // Block here to avoid collisions
                             0,
                             operation_size*sizeof(block_vector_t),
                             output.p_data + current_offset_blocks,
@@ -195,20 +191,12 @@ int main(int argc, char** argv)
                             NULL,
                             NULL);
 
-        clFlush(queue);
-        
-        current_offset_blocks += operation_size;
+        current_offset_blocks += alloc_size_blocks;
     }
     
     // Cleanup
-    clFinish(queue);
-    for (size_t batch = 0; batch < num_batches; ++batch)
-    {
-        clReleaseMemObject(d_inputs[batch]);
-        clReleaseMemObject(d_outputs[batch]);
-    }
-    free(d_inputs);
-    free(d_outputs);
+    clReleaseMemObject(d_input);
+    clReleaseMemObject(d_output);
     clReleaseMemObject(d_key_schedule);
     clReleaseProgram(program);
     clReleaseKernel(kernel);
