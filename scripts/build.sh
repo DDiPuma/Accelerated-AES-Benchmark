@@ -6,7 +6,7 @@
 # -march=native is required to enable AES instructions and allow vector optimizations
 
 CC="gcc"
-CFLAGS="-Wall -O2 -funroll-loops -march=native -lpthread -lOpenCL"
+CFLAGS="-Wall -O2 -funroll-loops -march=native -lm -lpthread -lOpenCL"
 
 SRC_DIR="src"
 INCLUDE_DIR="src/include"
