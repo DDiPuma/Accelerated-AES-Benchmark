@@ -64,11 +64,13 @@ typedef uchar16 aes_key_t;
 typedef struct key_schedule_t {
     aes_key_t k[NUM_ROUNDS+1];
 } key_schedule_t;
+
+#endif
+
 typedef union counter_t {
     aes_key_t as_vector;
-    size_t as_scalar[2];
+    uint64_t as_scalar[2];
 } counter_t;
-#endif
 
 #ifndef AES_CL
 const uint8_t sbox[256] = {
@@ -120,7 +122,9 @@ typedef struct thread_args_t {
     key_schedule_t* p_key_sched;
     size_t offset;
     size_t count;
+    size_t nonce;
 } thread_args_t;
+
 #endif
 
 /** Multiplication in the Galois field GF(2^8) with the AES modulus
@@ -176,5 +180,23 @@ __constant uint8_t GFMulBy3[256] = {
      0x3b, 0x38, 0x3d, 0x3e, 0x37, 0x34, 0x31, 0x32, 0x23, 0x20, 0x25, 0x26, 0x2f, 0x2c, 0x29, 0x2a, 
      0x0b, 0x08, 0x0d, 0x0e, 0x07, 0x04, 0x01, 0x02, 0x13, 0x10, 0x15, 0x16, 0x1f, 0x1c, 0x19, 0x1a
 };
+
+#ifndef AES_CL
+void BigEndianIncrement(__m128i* p_input)
+{
+    uint8_t* p_bytes = (uint8_t*) p_input;
+    
+    // General logic for this comes from libgcrypt cipher-ctr.c
+    for (uint8_t byte_idx = sizeof(block_vector_t); byte_idx > 0; --byte_idx)
+    {
+        ++p_bytes[byte_idx-1];
+        if (p_bytes[byte_idx-1] != 0)
+        {
+            break;
+        }
+    }
+}
+#else
+#endif
 
 #endif

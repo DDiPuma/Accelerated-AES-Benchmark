@@ -24,12 +24,14 @@ __kernel void AesCipher128(__constant block_vector_t* p_inputs,
 {
     size_t idx = get_global_id(0);
     
+    // Treat counter as big endian
     counter_t counter;
-    counter.as_scalar[0] = idx + idx_offset;
+    counter.as_scalar[0] = 0;
     counter.as_scalar[1] = idx + idx_offset;
+    counter.as_vector.s89abcdef = counter.as_vector.sfedcba98;
     
     // Copy data into GPU private address space
-    block_vector_t state = p_inputs[idx] ^ counter.as_vector;
+    block_vector_t state = counter.as_vector;
     key_schedule_t key_sched = *p_key_sched;
     
     AddRoundKey(&state, &(key_sched.k[0]));
@@ -94,7 +96,7 @@ __kernel void AesCipher128(__constant block_vector_t* p_inputs,
     AddRoundKey(&state, &(key_sched.k[10]));
 
     // Save output
-    p_outputs[idx] = state;
+    p_outputs[idx] = p_inputs[idx] ^ state;
 }
 
 void SubBytes(block_vector_t* const p_state)

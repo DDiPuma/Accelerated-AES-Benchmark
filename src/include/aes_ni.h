@@ -11,17 +11,6 @@
  *  derivation is not as straightforward as the instruction name suggests.
  */
 
-void KeyExpansion(const aes_key_t* const p_key,
-                  key_schedule_t* const p_key_sched);
-
-__m128i AesCipher128(__m128i input,
-                     const key_schedule_t* const p_key_sched,
-                     const size_t counter);
-
-__m128i InvAesCipher128(__m128i input,
-                        const key_schedule_t* const p_key_sched,
-                        const size_t counter);
-
 /*
  * Precondition: p_key_sched should be initialized with KeyExpansion
  *               before using the cipher, since the key schedule is
@@ -29,9 +18,9 @@ __m128i InvAesCipher128(__m128i input,
  */
 __m128i AesCipher128(const __m128i input,
                      const key_schedule_t* const p_key_sched,
-                     const size_t counter)
+                     const __m128i counter)
 {
-    __m128i state = input ^ counter ^ p_key_sched->k[0].i;
+    __m128i state = counter ^ p_key_sched->k[0].i;
     
     // The last round is a little different, so it is excluded
     state = _mm_aesenc_si128(state, p_key_sched->k[1].i);
@@ -47,36 +36,7 @@ __m128i AesCipher128(const __m128i input,
     // Perform the last round
     state = _mm_aesenclast_si128(state, p_key_sched->k[NUM_ROUNDS].i);
     
-    return state;
-}
-
-/*
- * Precondition: p_key_sched should be initialized with KeyExpansion
- *               before using the cipher, since the key schedule is
- *               the same for every 128-bit block.
- */
-__m128i InvAesCipher128(const __m128i input,
-                        const key_schedule_t* const p_key_sched,
-                        const size_t counter)
-{
-    __m128i state = input ^ p_key_sched->k[NUM_ROUNDS].i;
-    
-    // The last round is a little different, so it is excluded
-    for (uint8_t round = NUM_ROUNDS-1; round > 0; --round)
-    {
-        state = _mm_aesdec_si128(state, p_key_sched->k[round].i);
-    }
-
-    // Perform the last round
-    state = _mm_aesdeclast_si128(state, p_key_sched->k[0].i) ^ counter;
-    
-    char* p_counter = (char*) &counter;
-    
-    printf("CTR %hhx,%hhx,%hhx,%hhx,%hhx,%hhx,%hhx,%hhx\n",
-           p_counter[0], p_counter[1], p_counter[2], p_counter[3],
-           p_counter[4], p_counter[5], p_counter[6], p_counter[7]);
-    
-    return state;
+    return state ^ input;
 }
 
 __m128i KeyExpansionAssist(__m128i tmp1, __m128i tmp2)
@@ -142,17 +102,6 @@ void KeyExpansion(const aes_key_t* const p_key,
     tmp2 = _mm_aeskeygenassist_si128(tmp1, 0x36);
     tmp1 = KeyExpansionAssist(tmp1, tmp2);
     p_key_sched->k[10].i = tmp1;
-}
-
-void InvKeyExpansion(const aes_key_t* const p_key,
-                     key_schedule_t* const p_key_sched)
-{
-    KeyExpansion(p_key, p_key_sched);
-    
-    for (uint8_t round = 1; round < NUM_ROUNDS; ++round)
-    {
-        p_key_sched->k[round].i = _mm_aesimc_si128(p_key_sched->k[round].i);
-    }
 }
 
 #endif

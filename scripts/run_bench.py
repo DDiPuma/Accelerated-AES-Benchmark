@@ -34,7 +34,7 @@ FILE_SIZES: Dict[str, int] = {
     "8G": 2**33,
     }
 
-PROGRAMS: List[str] = ["bench_cpu", "bench_cl", "bench_ni"]
+PROGRAMS: List[str] = ["bench_cpu", "bench_cl", "bench_gcrypt", "bench_ni"]
 
 def main() -> None:
     raw_timing_ns: Dict[str, Dict[int, List[int]]] = {}
@@ -56,6 +56,8 @@ def main() -> None:
                 run_time: int = time_ns() - start_time
                 
                 raw_timing_ns[program][size].append(run_time)
+                
+                print(f"Finished iteration {iteration} of {program} at size {size}")
     
     timing_ms: Dict[str, Dict[str, float]] = {}
     

@@ -1,9 +1,11 @@
-\documentclass[a4paper,10pt,conference]{IEEEtran}
+\documentclass[a4paper,10pt]{article}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{amsmath}
 \usepackage{float}
+\usepackage[margin=1in]{geometry}
 \usepackage{graphicx}
+\usepackage{hyperref}
 \usepackage[utf8]{inputenc}
 
 % amsmath clobbers this IEEE setting
@@ -18,7 +20,7 @@
 
 \section{Introduction}
 
-In recent years, encryption has become ubiquitous.  Smartphones and personal computers are often fully encrypted by default, and cryptography is being applied in new ways, such as for cryptocurrencies.  As a result, GPU, FPGA, and ASIC-accelerated cryptographic implementations are in focus.  On modern x86 and ARM processors, there are instructions to accelerate the advanced encryption standard (AES) algorithm.  This paper will describe the AES algorithm in enough detail to implement it, and then study three implementations of the algorithm: a naive software implementation written in C; a C implementation using compiler intrinsics for the Intel AES instructions; and an Open Compute Library (OpenCL) implementation targeted at GPUs.  Each of the implementations will be profiled for their performance.
+In recent years, encryption has become ubiquitous.  Smartphones and personal computers are often fully encrypted by default, and cryptography is being applied in new ways, such as for cryptocurrencies.  As a result, GPU, FPGA, and ASIC-accelerated cryptographic implementations are in focus.  On modern x86 and ARM processors, there are instructions to accelerate the advanced encryption standard (AES) algorithm.  This paper will describe the AES algorithm in enough detail to implement it, and study three implementations of the algorithm: a naive software implementation written in C; a C implementation using compiler intrinsics for the Intel AES instructions; and an Open Compute Library (OpenCL) implementation targeted at GPUs.  Each of the implementations will be profiled for their performance.
 
 \section{Technical Background}
 
@@ -32,7 +34,7 @@ From an implementation perspective, the AES algorithm is relatively simple.  At 
 
 How the 128-bit blocks are handled can vary depending on the specific cipher mode being used.  Popular modes for AES include electronic codebook (ECB), cipher block chaining (CBC), and counter (CTR)\cite{intel}.  ECB is the simplest of the group, and encrypts each block of plaintext on its own.  While ECB is the easiest mode to implement, the ciphertext produced can reveal repetition in the plaintext, so it is insecure.  CBC XORs the current block's plaintext with the previous block's ciphertext in order to remedy the security flaws of ECB.  Although this method is far more secure than ECB, it cannot be parallelized, since each block depends on its immediate predecessor.  This makes CBC a bad candidate for GPU acceleration.  The CTR mode XORs each block with a deterministic number.  The number can be produced by a simple counter or a pseudorandom sequence.  CTR can be parallelized, provided that the counter is parallel-safe.
 
-This paper will implement the ECB mode, since it is the easiest, and it can be verified against the official AES specification published by the National Institute of Standards and Technologies (NIST).  The specification includes a thorough example of the encryption of a single block (which is effectively ECB mode).
+This paper will implement the CTR mode, since it provides a balance between performance and security.  Moreover, CTR  reduces to ECB if the counter repeatedly returns zero.  This allows it be verified against the official AES specification published by the National Institute of Standards and Technologies (NIST).  The specification includes a thorough example of the encryption of a single block (which is effectively ECB mode).
 
 Additionally, the AES specification supports three different key lengths: 128-bit, 192-bit, and 256-bit.  Each key length uses a different number of encryption rounds per the specification (10, 12, and 14 rounds, respectively).  For this project, only the 128-bit version will be implemented.
 
@@ -43,9 +45,11 @@ Given a 128-bit block and the fully expanded key schedule (key expansion is desc
 \begin{algorithm}
 \caption{AES-128 Encryption}
 \begin{algorithmic}[1]
-\Function{AesEncrypt128}{$input$, $output$, $key$}
+\Function{AesEncrypt128}{$input$, $output$, $key$, $counter$}
 
-\State $state\gets$ \Call{AddRoundKey}{$input$, $key$, $0$}
+\State $state\gets$ $input$ + $counter$
+
+\State $state\gets$ \Call{AddRoundKey}{$state$, $key$, $0$}
 
 \State $round\gets 1$
 \While{$round\leq 9$}
@@ -65,7 +69,7 @@ Given a 128-bit block and the fully expanded key schedule (key expansion is desc
 \end{algorithmic}
 \end{algorithm}
 
-The initial block can be viewed as a 4-by-4 matrix, where $A$ is a 16-byte array as in \ref{block}.
+The initial block can be viewed as a 4-by-4 matrix, where $A$ is a 16-byte array as in \eqref{block}.
 
 \begin{equation}
  \begin{bmatrix}
@@ -77,7 +81,7 @@ The initial block can be viewed as a 4-by-4 matrix, where $A$ is a 16-byte array
 \label{block}
 \end{equation}
 
-Moreover, treating the current round key as a 16-byte array named $K$, the key is also a 4x4 matrix as in \ref{key}.
+Moreover, treating the current round key as a 16-byte array named $K$, the key is also a 4x4 matrix as in \eqref{key}.
 
 \begin{equation}
  \begin{bmatrix}
@@ -90,11 +94,6 @@ Moreover, treating the current round key as a 16-byte array named $K$, the key i
 \end{equation}
 
 \subsubsection{AddRoundKey}
-
-The AddRoundKey step is trivial.  The round key from the expanded key schedule is XOR'd with the block to form an updated block as shown in \ref{addroundkey}.
-
-\begin{figure*}[!t]
-\normalsize
 
 \begin{equation}
  \begin{bmatrix}
@@ -120,6 +119,11 @@ The AddRoundKey step is trivial.  The round key from the expanded key schedule i
 \label{addroundkey}
 \end{equation}
 
+The AddRoundKey step is trivial.  The round key from the expanded key schedule is XORed with the block to form an updated block as shown in \eqref{addroundkey}.
+
+\subsubsection{SubBytes}
+
+
 \begin{equation}
  \begin{bmatrix}
   A[0] & A[4] & A[8] & A[12] \\
@@ -137,6 +141,10 @@ The AddRoundKey step is trivial.  The round key from the expanded key schedule i
 \label{subbytes}
 \end{equation}
 
+The SubBytes sub-function replaces every byte of the block with a unique byte from a standardized lookup table, denoted by the byte array $s$ in \eqref{subbytes}.  In the literature, this table is referred to as the ``s-box''.
+
+\subsubsection{ShiftRows}
+
 \begin{equation}
  \begin{bmatrix}
   A[0] & A[4] & A[8] & A[12] \\
@@ -153,6 +161,10 @@ The AddRoundKey step is trivial.  The round key from the expanded key schedule i
  \end{bmatrix}
 \label{shiftrows}
 \end{equation}
+
+ShiftRows rotates each row of the block cyclically.  The "top" row is left alone, the next row is shifted by 1 byte, then 2 bytes, and the "bottom" row is shifted by 3 bytes as shown in \ref{shiftrows}.
+
+\subsubsection{MixColumns}
 
 \begin{equation}
  \begin{bmatrix}
@@ -177,25 +189,11 @@ The AddRoundKey step is trivial.  The round key from the expanded key schedule i
  \label{mixcolumns}
 \end{equation}
 
-\hrulefill
-\vspace*{4pt}
-\end{figure*}
-
-\subsubsection{SubBytes}
-
-The SubBytes sub-function replaces every byte of the block with a unique byte from a standardized lookup table, denoted by the byte array $s$ in \ref{subbytes}.  In the literature, this table is referred to as the ``s-box''.
-
-\subsubsection{ShiftRows}
-
-ShiftRows rotates each row of the block cyclically.  The "top" row is left alone, the next row is shifted by 1 byte, then 2 bytes, and the "bottom" row is shifted by 3 bytes as shown in \ref{shiftrows}.
-
-\subsubsection{MixColumns}
-
-MixColumns involves a matrix multiplication of the block with a standardized matrix as shown in \ref{mixcolumns}.
+MixColumns involves a matrix multiplication of the block with a standardized matrix as shown in \eqref{mixcolumns}.
 
 This is not a ``typical'' matrix multiplication on 8-bit integers.  Instead, this is performed in in the Galois Field GF($2^8$) modulo 0x1b.  As far as computation goes, this means that multiplications are performed without carries, addition is replaced with XOR, and there is a modulus\cite{galois}.
 
-Computing the new $A$ is shown in \ref{mixcolumnex}.
+Computing the new $A$ is shown in \eqref{mixcolumnex}.
 
 \begin{align}
  \label{mixcolumnex}
@@ -212,9 +210,9 @@ Key expansion produces unique round keys for each round of encryption from the o
 
 The first round key in the schedule is the original key.  From there, each round key is produced by manipulating the previous round key.  For the purposes of key expansion, the key is considered as an array of 4 32-bit words.
 
-The first word in each round key is produced by taking the last word of the previous round key and then bit-manipulating it.  This word is rotated cyclically by one byte, and each of its bytes are substituted using the s-box from SubBytes.  Then, the word is XOR'd with a ``round constant''.  (Round constants are unique for each round of encryption.  The lower 3 bytes of each round constant are 0s, but the upper bytes are 0, then powers of 2 modulo 0x1b.  That is, the round constants are 0x00000000, 0x01000000, 0x02000000, ..., 0x1b000000, 0x36000000.)  Finally, this word is XOR'd with the first word of the previous round key,
+The first word in each round key is produced by taking the last word of the previous round key and then bit-manipulating it.  This word is rotated cyclically by one byte, and each of its bytes are substituted using the s-box from SubBytes.  Then, the word is XORed with a ``round constant''.  (Round constants are unique for each round of encryption.  The lower 3 bytes of each round constant are 0s, but the upper bytes are 0, then powers of 2 modulo 0x1b.  That is, the round constants are 0x00000000, 0x01000000, 0x02000000, ..., 0x1b000000, 0x36000000.)  Finally, this word is XORed with the first word of the previous round key,
 
-The second, third, and fourth words of each round key are much simpler to calculate.  These are produced by XOR'ing the previous word with the previous round key's Nth word.  For example, the second round key's second word is the second round key's first word XOR the first round key's second word; the second round key's third word is the second round key's second word XOR the first round key's third word; and so on.
+The second, third, and fourth words of each round key are much simpler to calculate.  These are produced by XORing the previous word with the previous round key's Nth word.  For example, the second round key's second word is the second round key's first word XOR the first round key's second word; the second round key's third word is the second round key's second word XOR the first round key's third word; and so on.
 
 \subsection{AES Decryption}
 
@@ -233,7 +231,7 @@ These changes do not meaningfully affect the computational complexity of the alg
 
 OpenCL is a standard\cite{khronos} which is designed to enable parallel computing across GPUs, CPUs, and FPGAs.  Often, it is used to perform general purpose GPU computation.
 
-An OpenCL program is made of a main executable and a ``kernel''.  
+An OpenCL program is made of a main executable and a ``kernel.''
 
 The main executable is written in standard C or C++. This program's purpose is essentially to set up and launch the OpenCL kernel.  It makes API calls that query for OpenCL-compatible devices, creates an OpenCL context and a command queue on that device (or devices), compiles and loads a kernel onto the device(s), performs memory transfers inputs to the GPU, enqueues kernel commands, and transfers outputs from the GPU.  OpenCL will automatically determine how to distribute the enqueued kernel command across the available compute resources, and executes the kernel in parallel across many inputs.  
 
@@ -243,7 +241,7 @@ Within kernels, OpenCL has more complex memory management than standard C does, 
 
 \subsection{Intel AES-NI}
 
-Intel's instruction set extensions for AES include 6 instruction\cite{intel}. They perform the following tasks:
+Intel's instruction set extensions for AES include 6 instructions\cite{intel}. They perform the following tasks:
 
 \begin{itemize}
  \item A single round of encryption
@@ -266,11 +264,14 @@ Since key expansion is only performed once per key, it is not necessary to optim
  
 \subsection{System Setup}
 
-This was developed for a ThinkPad T450s laptop with an Intel Core i5 (Broadwell) 5200U dual core CPU.  This CPU includes an integrated Intel HD 5000 GPU and supports AES-NI instruction set extensions, as well as SSE 4.2 and AVX 2 vector instruction set extensions.  Hyperthreading is enabled to allow 4 simultaneous processor threads, and 128MB of RAM is dedicated to the integrated GPU in BIOS.
+This was developed and tested on two systems:
+\begin{itemize}
+\item{A ThinkPad T450s laptop with an Intel Core i5 (Broadwell) 5200U dual core CPU.  This CPU includes an integrated Intel HD 5000 GPU and supports AES-NI instruction set extensions, as well as SSE 4.2 and AVX 2 vector instruction set extensions.  Hyperthreading is enabled to allow 4 simultaneous processor threads, and 128MB of RAM is dedicated to the integrated GPU in BIOS.  In terms of system software, the system is running Arch Linux which is up to date as of November 2020.  This includes Linux kernel 5.9.9, GNU Compiler Collection 10.2.0, and glibc 2.32.}
 
-In terms of system software, the system is running Arch Linux which is up to date as of November 2020.  This includes Linux kernel 5.9.9, GNU Compiler Collection 10.2.0, and glibc 2.32.
+\item{An Amazon Web Services (AWS) Elastic Compute Cloud (EC2) instance.  Specifically, this instance was a g4dn.xlarge instance with 4 virtual Intel Cascade Lake CPUs, 16GB of RAM, and an NVIDIA Tesla T4 GPU.  The CPUs include AES-NI instructions, as well as all Intel vector instructions up to and including AVX-512.  The GPU has 16GB of memory and 2,560 CUDA cores.  An Amazon Linux 2 machine image with NVIDIA's Tesla drivers pre-installed was used.}
+\end{itemize}
 
-The un-accelerated implementation should compile and run on any modern system with a C compiler and support for POSIX threads (pthreads).  The CPU-accelerated implementation requires Intel compiler intrinsics and hardware support for the AES-NI extension set, which is available on many modern Intel and AMD CPUs.  Finally, the GPU-accelerated implementation requires OpenCL 2.2 support in software and hardware.  However, only the configuration discussed above has been tested.
+The un-accelerated implementation should compile and run on any modern system with a C compiler and support for POSIX threads (pthreads).  The CPU-accelerated implementation requires Intel compiler intrinsics and hardware support for the AES-NI extension set, which is available on many modern Intel and AMD CPUs.  Finally, the GPU-accelerated implementation requires OpenCL 2.2 support in software and hardware.  However, only the configurations discussed above have been tested.
 
 \subsection{Implementation}
 
@@ -300,25 +301,44 @@ The instructions greatly simplify the code needed to implement AES.  Aside from 
 
 \section{Results}
 
-\begin{figure*}[!t]
- \includegraphics{results.png}
- \label{plot}
- \caption{Runtime growth for all AES implementations}
-\end{figure*}
+\begin{figure}[H]
+ \begin{center}
+  \includegraphics[width=\textwidth]{results_laptop.png}
+  \label{plot_laptop}
+  \caption{Runtime growth for all AES implementations on a laptop}
+ \end{center}
+\end{figure}
 
-After executing all of the implementations several times on a range of file sizes, the average runtime for each implementation/size combination was plotted, as in \ref{plot}.  Note that software-only and hardware-accelerated implementations were run using 4 simultaneous CPU threads.
+\begin{figure}[H]
+ \begin{center}
+  \includegraphics[width=\textwidth]{results_aws.png}
+  \label{plot_aws}
+  \caption{Runtime growth for all AES implementations on a laptop}
+ \end{center}
+\end{figure}
 
+After executing all of the implementations several times on a range of file sizes, the average runtime for each implementation/size combination was plotted for both configurations.  Note that software-only and hardware-accelerated implementations were run using 4 simultaneous CPU threads.
+
+\subsection{Analysis for Both Configurations}
 In general, all implementations have linear runtime growth.  The algorithm for encrypting a single block is not influenced at all by the number of blocks, the data in the blocks, or the key.  Therefore, the algorithm's execution time should grow linearly with the number of blocks.
 
 At small file sizes, the execution time does not change significantly as the file size increases.  This is because there are overhead costs to running these benchmarks.  All of these programs open/mmap two files (and later munmap/close them) and they derive the AES key schedule at runtime.  The pure C and AES-NI accelerated C both spawn pthreads, and the OpenCL program makes calls to gain access to the GPU and loads the AES algorithm onto it.  These operations should take the same amount of time to execute regardless of the file size, and with short execution times, the constant overhead dominates the expected linear runtime growth.
 
-With this hardware/software setup, AES-NI is clearly the best performing at large file sizes, and the GPU-accelerated code is slightly faster than the software-only version.  This is in spite of the relatively weak integrated GPU used for this analysis.  Using a dedicated GPU would allow the OpenCL software to outperform the software-only implementation by a larger margin.
+The runtime decrease from 1KB to 2KB is unexpected, and occurred consistently across executions and implementations.  This may be a quirk of handling 1KB files on the systems being studied.
 
-The runtime decrease from 1KB to 2KB is unexpected, and occurred consistently across executions and implementations.  This may be a quirk of handling 1KB files on the system being studied.
+\subsection{Observations for the Laptop Configuration}
+
+With the laptop's hardware/software setup, AES-NI is clearly the best performing program beginning at the 16KB  file size.  The GPU code has substantial overhead which limits its usefulness for small files, but it slightly outperforms the software-only program for sizes ranging from 2MB through 2GB. For the 4GB and 8GB file sizes, and the GPU-accelerated code is slightly slower than the software-only version.  This is likely due to the limited GPU memory on this device.
+
+\subsection{Observations for the AWS Server Configuration}
+
+Using the AWS server, the AES-NI accelerated implementation is the fastest for files below 128MB.  Beyond that point, the OpenCL version of the program is performance-competitive with the AES-NI application.  The pure software implementation is still generally the slowest (with the exception of small file sizes, where OpenCL's overhead dominates runtime).  However, the software-only version performs much more similarly to the AES-NI algorithm on the AWS server than it does on the laptop.  This is likely due to the availability of 512-bit vector instructions on the AWS machine's CPU, as well as other instruction optimizations made between Broadwell and Cascade Lake.
+
+There is a strange dropoff in runtime between the 1GB and 2GB file sizes.  This occurred for all three implementations, and may be a consequence of filesystem or network configuration on Amazon's servers.
 
 \section{Code Description}
 
-Full source code is available on GitHub at https://github.com/DDiPuma/Accelerated-AES-Benchmark.
+Full source code is available on GitHub at \url{https://github.com/DDiPuma/Accelerated-AES-Benchmark}.
 
 \subsection{Test Driver Software}
 
@@ -340,7 +360,7 @@ The OpenCL version of the code performs some boilerplate OpenCL setup, including
 
 \subsection{Scripts to Reproduce Output}
 
-The source code includes several scripts to set up the system to run benchmarks.  After cloning and cd'ing into the the git repository, executing ``scripts/build.sh'' will compile all of the programs into the ``bin'' directory. Running ``scripts/make\_inputs.sh'' will generate pseudorandom files ranging from 1 kilobyte to 1 gigabyte in the ``input'' directory and will create an ``output'' directory.
+The source code includes several scripts to set up the system to run benchmarks.  After cloning and cd'ing into the the git repository, executing ``scripts/build.sh'' will compile all of the programs into the ``bin'' directory. Running ``scripts/make\_inputs.sh'' will generate pseudorandom files ranging from 1 kilobyte to 8 gigabytes in the ``input'' directory and will create an ``output'' directory.
 
 Additionally, the scripts which execute the benchmarks and generate the results plot are provided.  Executing ``scripts/run\_bench.py'' will execute all three benchmarks 10 times per input file.  It then outputs the average runtime for each implementation and file size combination.  Copying this output into the ``scripts/plot.py'' program and then executing it provides the final plot.
 
@@ -354,11 +374,9 @@ There are several aspects of this project which can be studied further.
 
 The possibility of encrypting multiple blocks in one function call should be explored, instead of encrypting each block independently in a for-loop. This may optimize performance by removing some branch instructions and even allowing the compiler to identify optimizations using SIMD instructions.
 
-In regards to the GPU version of the program, it should be studied on a dedicated GPU rather than the integrated GPU that was used in this project. Such a GPU would have more memory and more cores, so it would better demonstrate the massively parallel nature of GPUs. It would be interesting to find out whether a GPU can outperform the hardware-accelerated software by encrypting hundreds of blocks simultaneously. One cost-effective way to test this is to rent an instance of a cloud server with a GPU.
-
 The OpenCL/GPU code might have opportunities for further optimization.  Experimenting with kernel size and memory synchronization options may allow for better performance than relying on the defaults.
 
-Additionally, the implementations presented here are insecure. It is vulnerable to side-channel attacks which may be mitigated using more advanced software techniques. Additionally, the ECB mode is cryptographically vulnerable, as the ciphertext reveals the presence and location of repeated 16-byte blocks in the plaintext. Replacing ECB mode with CTR mode would mitigate this risk while preserving the parallel nature of this implementation.
+Additionally, the implementations presented here may be vulnerable to side-channel attacks.  Testing and improving the security of the programs would make them more practical for day-to-day use.
 
 \bibliographystyle{ieeetr}
 \bibliography{aes}

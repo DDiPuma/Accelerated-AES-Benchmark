@@ -3,7 +3,8 @@
 
 #include <pthread.h>
 
-#include "include/aes_ni.h"
+#include <gcrypt.h>
+
 #include "include/file_utils.h"
 
 void* encrypt(void* pv_args)
@@ -14,32 +15,43 @@ void* encrypt(void* pv_args)
     aes_file_t* p_output = p_args->p_output;
     key_schedule_t* p_key_sched = p_args->p_key_sched;
     
-    __m128i counter = _mm_set_epi64x(0, 
-                                    p_args->offset + p_args->nonce);
+    gcry_cipher_hd_t cipher_handle;
     
-    for (size_t block = p_args->offset;
-         block < p_args->offset + p_args->count;
-         ++block)
-    {
-        p_output->p_data[block].i = AesCipher128(p_input->p_data[block].i,
-                                                 p_key_sched,
-                                                 counter);
+    gcry_cipher_open(&cipher_handle,
+                     GCRY_CIPHER_AES128,
+                     GCRY_CIPHER_MODE_CTR,
+                     0);
+    
+    gcry_cipher_setkey(cipher_handle,
+                       p_key_sched,
+                       sizeof(aes_key_t));
+
+    __m128i init_ctr = _mm_set_epi64x(0, 
+                                      p_args->nonce + p_args->offset);
+    
+    gcry_cipher_setctr(cipher_handle,
+                       &init_ctr,
+                       sizeof(block_vector_t));
         
-        // Match gcrypt's output by incrementing as if counter
-        // were big endian
-        BigEndianIncrement(&counter);
-    }
+    gcry_cipher_encrypt(cipher_handle,
+                        p_output->p_data + p_args->offset,
+                        p_args->count * sizeof(block_vector_t),
+                        p_input->p_data + p_args->offset,
+                        p_args->count * sizeof(block_vector_t));
+    
+    gcry_cipher_close(cipher_handle);
     
     return NULL;
 }
 
 int main(int argc, char** argv)
 {
-    // Hardcoded key and nonce
+    // Hardcoded key
     aes_key_t key = { .b = {0x2b, 0x7e, 0x15, 0x16,
                             0x28, 0xae, 0xd2, 0xa6,
                             0xab, 0xf7, 0x15, 0x88,
                             0x09, 0xcf, 0x4f, 0x3c}};
+    // Hardcoded nonce
     uint64_t nonce = 0;
                             
     // Take input from files (provided at command line)
@@ -68,10 +80,11 @@ int main(int argc, char** argv)
         printf("Thread count not provided; defaulting to 1 thread.\n");
         thread_count = 1;
     }
-    
-    // Expand keys
+
+    // libgcrypt performs key schedule derivation
+    // We pass the key instead of a key schedule
     key_schedule_t key_sched;
-    KeyExpansion(&key, &key_sched);
+    key_sched.k[0] = key;
     
     // Perform encryption    
     if (thread_count == 1)
@@ -84,7 +97,6 @@ int main(int argc, char** argv)
         thread_args.offset = 0;
         thread_args.count = input.size_blocks;
         thread_args.nonce = nonce;
-        
         encrypt((void*) &thread_args);
     }
     else
@@ -162,7 +174,7 @@ int main(int argc, char** argv)
         free(p_thread_args);
         free(p_threads);
     }
-    
+
     close_files(&input, &output);
     return 0;
 }

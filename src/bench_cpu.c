@@ -14,6 +14,9 @@ void* encrypt(void* pv_args)
     aes_file_t* p_output = p_args->p_output;
     key_schedule_t* p_key_sched = p_args->p_key_sched;
     
+    __m128i counter = _mm_set_epi64x(0, 
+                                     p_args->offset + p_args->nonce);
+    
     for (size_t block = p_args->offset;
          block < p_args->offset + p_args->count;
          ++block)
@@ -21,7 +24,9 @@ void* encrypt(void* pv_args)
         AesCipher128(&(p_input->p_data[block]),
                      &(p_output->p_data[block]),
                      p_key_sched,
-                     block);
+                     counter);
+        
+        BigEndianIncrement(&counter);
     }
     
     return NULL;
@@ -29,11 +34,12 @@ void* encrypt(void* pv_args)
 
 int main(int argc, char** argv)
 {
-    // Hardcoded key
+    // Hardcoded key/nonce
     aes_key_t key = { .b = {0x2b, 0x7e, 0x15, 0x16,
                             0x28, 0xae, 0xd2, 0xa6,
                             0xab, 0xf7, 0x15, 0x88,
                             0x09, 0xcf, 0x4f, 0x3c}};
+    uint64_t nonce = 0;
                             
     // Take input from files (provided at command line)
     aes_file_t input;
@@ -76,6 +82,7 @@ int main(int argc, char** argv)
         thread_args.p_key_sched = &key_sched;
         thread_args.offset = 0;
         thread_args.count = input.size_blocks;
+        thread_args.nonce = nonce;
         
         encrypt((void*) &thread_args);
     }
@@ -122,6 +129,7 @@ int main(int argc, char** argv)
             p_thread_args[i].p_key_sched = &key_sched;
             p_thread_args[i].offset = thread_block_size*i;
             p_thread_args[i].count = thread_block_size;
+            p_thread_args[i].nonce = nonce;
             
             // Start thread
             int result = pthread_create(&(p_threads[i]),

@@ -170,14 +170,14 @@ int main(int argc, char** argv)
 
         // Run the kernel
         clEnqueueNDRangeKernel(queue,
-                            kernel,
-                            1,
-                            NULL,
-                            &alloc_size_blocks,
-                            NULL,
-                            0,
-                            NULL,
-                            NULL);
+                               kernel,
+                               1,
+                               NULL,
+                               &alloc_size_blocks,
+                               NULL,
+                               0,
+                               NULL,
+                               NULL);
         clFinish(queue);
         
         // Read outputs back to host
