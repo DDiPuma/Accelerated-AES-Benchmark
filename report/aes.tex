@@ -20,7 +20,7 @@
 
 \section{Introduction}
 
-In recent years, encryption has become ubiquitous.  Smartphones and personal computers are often fully encrypted by default, and cryptography is being applied in new ways, such as for cryptocurrencies.  As a result, GPU, FPGA, and ASIC-accelerated cryptographic implementations are in focus.  On modern x86 and ARM processors, there are instructions to accelerate the advanced encryption standard (AES) algorithm.  This paper will describe the AES algorithm in enough detail to implement it, and study three implementations of the algorithm: a naive software implementation written in C; a C implementation using compiler intrinsics for the Intel AES instructions; and an Open Compute Library (OpenCL) implementation targeted at GPUs.  Each of the implementations will be profiled for their performance.
+In recent years, encryption has become ubiquitous.  Smartphones and personal computers are often fully encrypted by default, and cryptography is being applied in new ways, such as for cryptocurrencies.  As a result, GPU, FPGA, and ASIC-accelerated cryptographic implementations are in focus.  On modern x86 and ARM processors, there are instructions to accelerate the advanced encryption standard (AES) algorithm.  This paper will describe the AES algorithm in enough detail to implement it, and study three custom implementations of the algorithm: a naive software implementation written in C; a C implementation using compiler intrinsics for the Intel AES instructions; and an Open Compute Library (OpenCL) implementation targeted at GPUs.  Each of the implementations will be profiled for their performance.  An implementation using the libgcrypt library will be studied as a reference.
 
 \section{Technical Background}
 
@@ -32,9 +32,7 @@ From an implementation perspective, the AES algorithm is relatively simple.  At 
  \item The plaintext to be encrypted is broken up into 128-bit blocks, and each block is processed through several rounds.  Each round consists of a byte substitution, a shift operation, a matrix multiplication, and an XOR with that round's key.
 \end{itemize}
 
-How the 128-bit blocks are handled can vary depending on the specific cipher mode being used.  Popular modes for AES include electronic codebook (ECB), cipher block chaining (CBC), and counter (CTR)\cite{intel}.  ECB is the simplest of the group, and encrypts each block of plaintext on its own.  While ECB is the easiest mode to implement, the ciphertext produced can reveal repetition in the plaintext, so it is insecure.  CBC XORs the current block's plaintext with the previous block's ciphertext in order to remedy the security flaws of ECB.  Although this method is far more secure than ECB, it cannot be parallelized, since each block depends on its immediate predecessor.  This makes CBC a bad candidate for GPU acceleration.  The CTR mode XORs each block with a deterministic number.  The number can be produced by a simple counter or a pseudorandom sequence.  CTR can be parallelized, provided that the counter is parallel-safe.
-
-This paper will implement the CTR mode, since it provides a balance between performance and security.  Moreover, CTR  reduces to ECB if the counter repeatedly returns zero.  This allows it be verified against the official AES specification published by the National Institute of Standards and Technologies (NIST).  The specification includes a thorough example of the encryption of a single block (which is effectively ECB mode).
+How the 128-bit blocks are handled can vary depending on the specific cipher mode being used.  Popular modes for AES include electronic codebook (ECB), cipher block chaining (CBC), and counter (CTR)\cite{intel}.  ECB is the simplest of the group, and encrypts each block of plaintext on its own.  While ECB is the easiest mode to implement, the ciphertext produced can reveal repetition in the plaintext, so it is insecure.  CBC XORs the current block's plaintext with the previous block's ciphertext in order to remedy the security flaws of ECB.  Although this method is far more secure than ECB, it cannot be parallelized, since each block depends on its immediate predecessor.  This makes CBC a bad candidate for GPU acceleration.  The CTR mode encrypts a deterministically generated number, and then XORs the output with the plaintext.  The number can be produced by a simple counter or a pseudorandom sequence.  CTR can be parallelized, provided that the counter is parallel-safe.    This paper will implement the CTR mode, since it is parallelizable and is considered secure\cite{schneier}.
 
 Additionally, the AES specification supports three different key lengths: 128-bit, 192-bit, and 256-bit.  Each key length uses a different number of encryption rounds per the specification (10, 12, and 14 rounds, respectively).  For this project, only the 128-bit version will be implemented.
 
@@ -214,18 +212,13 @@ The first word in each round key is produced by taking the last word of the prev
 
 The second, third, and fourth words of each round key are much simpler to calculate.  These are produced by XORing the previous word with the previous round key's Nth word.  For example, the second round key's second word is the second round key's first word XOR the first round key's second word; the second round key's third word is the second round key's second word XOR the first round key's third word; and so on.
 
-\subsection{AES Decryption}
+\subsubsection{Counter}
 
-AES decryption is closely related to encryption since it is just inverting every operation of encryption in reverse order.  Several changes are made to invert the operations of encryption:
+For CTR mode, a counting sequence must be generated.  This can be any deterministic number sequence, but libgcrypt uses a big-endian 128-bit number which increments by 1 for each block.  This behavior will be replicated in order to have matching outputs between all implementations.
 
-\begin{itemize}
- \item The decryption key schedule can be obtained by performing MixColumns on the encryption key schedule.
- \item The s-box of SubBytes is replaced by an inverse s-box.
- \item The direction of the shift in ShiftRows is reversed.
- \item The coefficient matrix used in MixColumns is changed. 
-\end{itemize}
+\subsubsection{AES Decryption}
 
-These changes do not meaningfully affect the computational complexity of the algorithm, so implementing decryption would not provide meaningful results that cannot be obtained from the encryption implementations.
+Encryption and decryption are identical in CTR mode.  The plaintext can be obtained by XORing the encrypted counter sequence with the ciphertext.
 
 \subsection{OpenCL}
 
@@ -260,18 +253,22 @@ Key expansion is a slightly more complicated operation.  The key expansion instr
 
 Since key expansion is only performed once per key, it is not necessary to optimize this operation as heavily as encryption and decryption rounds are optimized.  This is part of why manual byte-shifting and shuffling is considered acceptable.  The manual byte-manipulation steps are also useful because they enable the key expansion instruction to work with 128, 192, and 256-bit keys (as well as larger key lengths if AES grows in the future).
 
+\subsection{libgcrypt}
+
+Libgcrypt is the cryptography library developed for and used by GnuPG, which is a collection of free and open-source cryptography software.  The library includes multiple encryption algorithms, block modes, and key lengths.  As such, it is a good reference implementation of AES to benchmark the AES ciphers developed here ``from scratch.''
+
 \section{Setup and Implementation}
  
 \subsection{System Setup}
 
 This was developed and tested on two systems:
 \begin{itemize}
-\item{A ThinkPad T450s laptop with an Intel Core i5 (Broadwell) 5200U dual core CPU.  This CPU includes an integrated Intel HD 5000 GPU and supports AES-NI instruction set extensions, as well as SSE 4.2 and AVX 2 vector instruction set extensions.  Hyperthreading is enabled to allow 4 simultaneous processor threads, and 128MB of RAM is dedicated to the integrated GPU in BIOS.  In terms of system software, the system is running Arch Linux which is up to date as of November 2020.  This includes Linux kernel 5.9.9, GNU Compiler Collection 10.2.0, and glibc 2.32.}
+\item{A ThinkPad T450s laptop with an Intel Core i5 (Broadwell) 5200U dual core CPU.  This CPU includes an integrated Intel HD 5000 GPU and supports AES-NI instruction set extensions, as well as SSE 4.2 and AVX 2 vector instruction set extensions.  Hyperthreading is enabled to allow 4 simultaneous processor threads, and 128MB of RAM is dedicated to the integrated GPU in BIOS.  In terms of system software, the system is running Arch Linux which is up to date as of November 2020.  This includes Linux kernel 5.9.9, GNU Compiler Collection 10.2.0, glibc 2.32, and libgcrypt 1.9.2.}
 
-\item{An Amazon Web Services (AWS) Elastic Compute Cloud (EC2) instance.  Specifically, this instance was a g4dn.xlarge instance with 4 virtual Intel Cascade Lake CPUs, 16GB of RAM, and an NVIDIA Tesla T4 GPU.  The CPUs include AES-NI instructions, as well as all Intel vector instructions up to and including AVX-512.  The GPU has 16GB of memory and 2,560 CUDA cores.  An Amazon Linux 2 machine image with NVIDIA's Tesla drivers pre-installed was used.}
+\item{An Amazon Web Services (AWS) Elastic Compute Cloud (EC2) instance.  Specifically, this instance was a g4dn.xlarge instance with 4 virtual Intel Cascade Lake CPUs, 16GB of RAM, and an NVIDIA Tesla T4 GPU.  The CPUs include AES-NI instructions, as well as all Intel vector instructions up to and including AVX-512.  The GPU has 16GB of memory and 2,560 CUDA cores.  An Amazon Linux 2 machine image with NVIDIA's Tesla drivers pre-installed was used.  This OS includes Linux kernel 4.14.214, GCC 7.3.1, glibc 2.26, and libgcrypt 1.5.3.}
 \end{itemize}
 
-The un-accelerated implementation should compile and run on any modern system with a C compiler and support for POSIX threads (pthreads).  The CPU-accelerated implementation requires Intel compiler intrinsics and hardware support for the AES-NI extension set, which is available on many modern Intel and AMD CPUs.  Finally, the GPU-accelerated implementation requires OpenCL 2.2 support in software and hardware.  However, only the configurations discussed above have been tested.
+The un-accelerated implementation should compile and run on any modern system with a C compiler and support for POSIX threads (pthreads).  The CPU-accelerated implementation requires Intel compiler intrinsics and hardware support for the AES-NI extension set, which is available on many modern Intel and AMD CPUs.  The GPU-accelerated implementation requires OpenCL 2.2 support in software and hardware.  Lastly, the libgcrypt implementation requires development headers and the libgcrypt library.  However, only the configurations discussed above have been tested.
 
 \subsection{Implementation}
 
@@ -322,9 +319,11 @@ After executing all of the implementations several times on a range of file size
 \subsection{Analysis for Both Configurations}
 In general, all implementations have linear runtime growth.  The algorithm for encrypting a single block is not influenced at all by the number of blocks, the data in the blocks, or the key.  Therefore, the algorithm's execution time should grow linearly with the number of blocks.
 
-At small file sizes, the execution time does not change significantly as the file size increases.  This is because there are overhead costs to running these benchmarks.  All of these programs open/mmap two files (and later munmap/close them) and they derive the AES key schedule at runtime.  The pure C and AES-NI accelerated C both spawn pthreads, and the OpenCL program makes calls to gain access to the GPU and loads the AES algorithm onto it.  These operations should take the same amount of time to execute regardless of the file size, and with short execution times, the constant overhead dominates the expected linear runtime growth.
+At small file sizes, the execution time does not change significantly as the file size increases.  This is because there are overhead costs to running these benchmarks.  All of these programs open/mmap two files (and later munmap/close them) and they derive the AES key schedule at runtime.  The pure C, AES-NI accelerated C, and libgcrypt implementations spawn pthreads, and the OpenCL program makes calls to gain access to the GPU and loads the AES algorithm onto it.  These operations should take the same amount of time to execute regardless of the file size, and with short execution times, the constant overhead dominates the expected linear runtime growth.
 
 The runtime decrease from 1KB to 2KB is unexpected, and occurred consistently across executions and implementations.  This may be a quirk of handling 1KB files on the systems being studied.
+
+In both configurations, the libgcrypt implementation performs nearly identically to the custom AES-NI program.  This makes sense, since the underlying library is optimized and uses the AES-NI instructions to perform encryption.
 
 \subsection{Observations for the Laptop Configuration}
 
@@ -334,7 +333,9 @@ With the laptop's hardware/software setup, AES-NI is clearly the best performing
 
 Using the AWS server, the AES-NI accelerated implementation is the fastest for files below 128MB.  Beyond that point, the OpenCL version of the program is performance-competitive with the AES-NI application.  The pure software implementation is still generally the slowest (with the exception of small file sizes, where OpenCL's overhead dominates runtime).  However, the software-only version performs much more similarly to the AES-NI algorithm on the AWS server than it does on the laptop.  This is likely due to the availability of 512-bit vector instructions on the AWS machine's CPU, as well as other instruction optimizations made between Broadwell and Cascade Lake.
 
-There is a strange dropoff in runtime between the 1GB and 2GB file sizes.  This occurred for all three implementations, and may be a consequence of filesystem or network configuration on Amazon's servers.
+There is a strange dropoff in runtime between the 1GB and 2GB file sizes.  This occurred for all implementations, and may be a consequence of filesystem or network configuration on Amazon's servers.
+
+% TODO - update
 
 \section{Code Description}
 
@@ -342,27 +343,22 @@ Full source code is available on GitHub at \url{https://github.com/DDiPuma/Accel
 
 \subsection{Test Driver Software}
 
-Each implementation was tested against known-accurate input-output combinations.
-
-The AES-NI implementation was tested using a full block encryption using the NIST specification test input.  The AES-NI encryption code was modified slightly to become a decryption program.  Any encrypted file should decrypt back to its original plaintext.
-
-The software-only implementation was spot-checked by evaluating the output of each function against the NIST-provided test inputs for the first encryption round.  Then, a full block encryption was performed to verify that the encryption works end-to-end on a single block.  Finally, a large file was encrypted, and its output was decrypted using the previously discussed AES-NI decryption program.  This procedure made it easier to identify which functions introduced bugs in the C implementation (it uncovered several byte-ordering bugs).
-
-The OpenCL implementation was tested by encrypting a full file and then decrypting it to ensure that the decrypted text matched the plaintext.  Since this implementation used functions derived from the plain C code, it was not necessary to debug function-by-function.
+The outputs of each ``hand-written'' implementation were compared with the output of the libgcrypt library to prove that they produced identical output.
 
 \subsection{Benchmark Software}
 
-Benchmark executables were developed to run each AES implementation.  These programs use a hard-coded key to eliminate the need to provide one as an input.  Memory-mapped input (i.e. plaintext) and output (i.e. ciphertext) files are used.  By using mmap() instead of read() and write(), the number of system calls is reduced substantially, which improves performance.
+Benchmark executables were developed to run each AES implementation.  These programs use a hard-coded key and counter to eliminate the need to provide one as an input.  Memory-mapped input (i.e. plaintext) and output (i.e. ciphertext) files are used.  By using mmap() instead of read() and write(), the number of system calls is reduced substantially, which improves performance.
 
-The software-only C and AES-NI accelerated C programs use POSIX threads (i.e. pthreads) to achieve parallelism.  Each thread runs a for-loop that encrypts one block per iteration.  Instead of using mutexes or any other synchronization method, the input and output files are broken up along cache line boundaries.  Since each cache line is accessed from only one thread, there are no data hazards, and synchronization is completely unnecessary.  Another benefit of this approach is that each thread is assigned a continuous span of memory, which improves data locality and therefore should improve the cache performance of the benchmark program.
+The software-only C, AES-NI accelerated, and libgcrypt-based C programs use POSIX threads (i.e. pthreads) to achieve parallelism.  Each thread runs a for-loop that encrypts one block per iteration.  Instead of using mutexes or any other synchronization method, the input and output files are broken up along cache line boundaries.  Since each cache line is accessed from only one thread, there are no data hazards, and synchronization is completely unnecessary.  Another benefit of this approach is that each thread is assigned a continuous span of memory, which improves data locality and therefore should improve the cache performance of the benchmark program.
 
 The OpenCL version of the code performs some boilerplate OpenCL setup, including querying the system for devices and creating a context.  Afterwards, it loads a pre-compiled program onto the GPU, sets it up as a kernel, copies data from the input file to the GPU.  The encryption is placed on the GPU's queue, and once it completes execution, the outputs are copied back to the CPU to be stored.  OpenCL does not require any special considerations to be made to prevent data hazards.
+
 
 \subsection{Scripts to Reproduce Output}
 
 The source code includes several scripts to set up the system to run benchmarks.  After cloning and cd'ing into the the git repository, executing ``scripts/build.sh'' will compile all of the programs into the ``bin'' directory. Running ``scripts/make\_inputs.sh'' will generate pseudorandom files ranging from 1 kilobyte to 8 gigabytes in the ``input'' directory and will create an ``output'' directory.
 
-Additionally, the scripts which execute the benchmarks and generate the results plot are provided.  Executing ``scripts/run\_bench.py'' will execute all three benchmarks 10 times per input file.  It then outputs the average runtime for each implementation and file size combination.  Copying this output into the ``scripts/plot.py'' program and then executing it provides the final plot.
+Additionally, the scripts which execute the benchmarks and generate the results plot are provided.  Executing ``scripts/run\_bench.py'' will execute all four benchmarks 10 times per input file.  It then outputs the average runtime for each implementation and file size combination.  Copying this output into the ``scripts/plot.py'' program and then executing it provides the final plot.
 
 \subsection{Other Utility Programs}
 
@@ -372,7 +368,7 @@ There is another program in ``bin'', which calculates complete lookup tables for
 
 There are several aspects of this project which can be studied further.
 
-The possibility of encrypting multiple blocks in one function call should be explored, instead of encrypting each block independently in a for-loop. This may optimize performance by removing some branch instructions and even allowing the compiler to identify optimizations using SIMD instructions.
+The possibility of encrypting multiple blocks in one function call should be explored, instead of encrypting each block independently in a for-loop. This may optimize performance by removing some branch instructions and even allowing the compiler to identify optimizations using SIMD instructions.  However, this approach may have limited benefits, as the highly-optimized libgcrypt implementation performs similarly to the custom AES-NI implementation.
 
 The OpenCL/GPU code might have opportunities for further optimization.  Experimenting with kernel size and memory synchronization options may allow for better performance than relying on the defaults.
 
