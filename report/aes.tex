@@ -24,7 +24,7 @@ In recent years, encryption has become ubiquitous.  Smartphones and personal com
 
 \section{Technical Background}
 
-AES is an encryption standard that was approved and published by the US government in the early 2000's.  Since it is a government-backed standard, it is thoroughly documented, and hardware implementations are even available in consumer electronics.  As such, it makes for an interesting case study in hardware acceleration.
+AES is an encryption standard that was approved and published by the US government in the early 2000's\cite{nist}.  Since it is a government-backed standard, it is thoroughly documented, and hardware implementations are even available in consumer electronics.  As such, it makes for an interesting case study in hardware acceleration.
 
 From an implementation perspective, the AES algorithm is relatively simple.  At a high level, the algorithm has only a few elements:
 \begin{itemize}
@@ -38,14 +38,14 @@ Additionally, the AES specification supports three different key lengths: 128-bi
 
 \subsection{AES Encryption Algorithm}
 
-Given a 128-bit block and the fully expanded key schedule (key expansion is described below), the AES algorithm consists of the following\cite{nist}:
+Given a 128-bit block and the fully expanded key schedule (key expansion is described below), the AES encryption process is described in Algorithm 1\cite{nist}:
 
 \begin{algorithm}
-\caption{AES-128 Encryption}
+\caption{AES-128 Encryption\cite{nist}}
 \begin{algorithmic}[1]
-\Function{AesEncrypt128}{$input$, $output$, $key$, $counter$}
+\Function{AesEncrypt128}{$input$, $key$, $counter$}
 
-\State $state\gets$ $input$ + $counter$
+\State $state\gets$ $counter$
 
 \State $state\gets$ \Call{AddRoundKey}{$state$, $key$, $0$}
 
@@ -62,12 +62,12 @@ Given a 128-bit block and the fully expanded key schedule (key expansion is desc
 \State $state\gets$ \Call{ShiftRows}{$state$}
 \State $state\gets$ \Call{AddRoundKey}{$state$, $key$, $10$}
 
-\State \Return $state$
+\State \Return $state$ + $input$
 \EndFunction
 \end{algorithmic}
 \end{algorithm}
 
-The initial block can be viewed as a 4-by-4 matrix, where $A$ is a 16-byte array as in \eqref{block}.
+The initial block can be viewed as a 4-by-4 matrix, where $A$ is a 16-byte array as in Equation \eqref{block}.
 
 \begin{equation}
  \begin{bmatrix}
@@ -79,7 +79,7 @@ The initial block can be viewed as a 4-by-4 matrix, where $A$ is a 16-byte array
 \label{block}
 \end{equation}
 
-Moreover, treating the current round key as a 16-byte array named $K$, the key is also a 4x4 matrix as in \eqref{key}.
+Moreover, treating the current round key as a 16-byte array named $K$, the key is also a 4x4 matrix as in Equation \eqref{key}.
 
 \begin{equation}
  \begin{bmatrix}
@@ -117,7 +117,7 @@ Moreover, treating the current round key as a 16-byte array named $K$, the key i
 \label{addroundkey}
 \end{equation}
 
-The AddRoundKey step is trivial.  The round key from the expanded key schedule is XORed with the block to form an updated block as shown in \eqref{addroundkey}.
+The AddRoundKey step is trivial.  The round key from the expanded key schedule is XORed with the block to form an updated block as shown in Equation \eqref{addroundkey}.
 
 \subsubsection{SubBytes}
 
@@ -139,7 +139,7 @@ The AddRoundKey step is trivial.  The round key from the expanded key schedule i
 \label{subbytes}
 \end{equation}
 
-The SubBytes sub-function replaces every byte of the block with a unique byte from a standardized lookup table, denoted by the byte array $s$ in \eqref{subbytes}.  In the literature, this table is referred to as the ``s-box''.
+The SubBytes sub-function replaces every byte of the block with a unique byte from a standardized lookup table, denoted by the byte array $s$ in Equation \eqref{subbytes}.  In the literature, this table is referred to as the ``s-box''.
 
 \subsubsection{ShiftRows}
 
@@ -160,7 +160,7 @@ The SubBytes sub-function replaces every byte of the block with a unique byte fr
 \label{shiftrows}
 \end{equation}
 
-ShiftRows rotates each row of the block cyclically.  The "top" row is left alone, the next row is shifted by 1 byte, then 2 bytes, and the "bottom" row is shifted by 3 bytes as shown in \ref{shiftrows}.
+ShiftRows rotates each row of the block cyclically.  The "top" row is left alone, the next row is shifted by 1 byte, then 2 bytes, and the "bottom" row is shifted by 3 bytes as shown in Equation \eqref{shiftrows}.
 
 \subsubsection{MixColumns}
 
@@ -187,18 +187,20 @@ ShiftRows rotates each row of the block cyclically.  The "top" row is left alone
  \label{mixcolumns}
 \end{equation}
 
-MixColumns involves a matrix multiplication of the block with a standardized matrix as shown in \eqref{mixcolumns}.
+MixColumns involves a matrix multiplication of the block with a standardized matrix as shown in Equations \eqref{mixcolumns}.
 
 This is not a ``typical'' matrix multiplication on 8-bit integers.  Instead, this is performed in in the Galois Field GF($2^8$) modulo 0x1b.  As far as computation goes, this means that multiplications are performed without carries, addition is replaced with XOR, and there is a modulus\cite{galois}.
 
-Computing the new $A$ is shown in \eqref{mixcolumnex}.
+Computing the new $A$ is shown in Equations \eqref{mixcolumnex}.
 
-\begin{align}
+\begin{equation}
+ \begin{aligned}[b]
+  A[0] &= 2 \cdot A[0] \oplus 3 \cdot A[1] \oplus A[2] \oplus A[3] \\
+  A[1] &= A[0] \oplus 2 \cdot A[1] \oplus 3 \cdot A[2] \oplus A[3] \\
+  &\;\;\vdots
+ \end{aligned}
  \label{mixcolumnex}
- A[0] &= 2 \cdot A[0] \oplus 3 \cdot A[1] \oplus A[2] \oplus A[3] \\
- A[1] &= A[0] \oplus 2 \cdot A[1] \oplus 3 \cdot A[2] \oplus A[3] \\
- &\;\;\vdots \notag
-\end{align}
+\end{equation}
 
 Note that $\cdot$ is used to represent carryless multiplication with a modulus of 0x1b.  A similar expression can be found for each of the 16 bytes of $A$.
 
@@ -215,6 +217,8 @@ The second, third, and fourth words of each round key are much simpler to calcul
 \subsubsection{Counter}
 
 For CTR mode, a counting sequence must be generated.  This can be any deterministic number sequence, but libgcrypt uses a big-endian 128-bit number which increments by 1 for each block.  This behavior will be replicated in order to have matching outputs between all implementations.
+
+libgcrypt's source code was used as a reference for the big endian counter implementation\cite{libgcrypt}.
 
 \subsubsection{AES Decryption}
 
@@ -255,7 +259,7 @@ Since key expansion is only performed once per key, it is not necessary to optim
 
 \subsection{libgcrypt}
 
-Libgcrypt is the cryptography library developed for and used by GnuPG, which is a collection of free and open-source cryptography software.  The library includes multiple encryption algorithms, block modes, and key lengths.  As such, it is a good reference implementation of AES to benchmark the AES ciphers developed here ``from scratch.''
+Libgcrypt is the cryptography library developed for and used by GnuPG\cite{libgcrypt}, which is a collection of free and open-source cryptography software.  The library includes multiple encryption algorithms, block modes, and key lengths.  As such, it is a good reference implementation of AES to benchmark the AES ciphers developed here ``from scratch.''
 
 \section{Setup and Implementation}
  
@@ -294,30 +298,32 @@ One additional optimization made to the OpenCL code is in the main executable.  
 
 \subsubsection{AES-NI Accelerated Implementation}
 
-The instructions greatly simplify the code needed to implement AES.  Aside from using the built-ins and implementing key expansion as described by Intel, the only optimization is manual loop unrolling.
+The instructions greatly simplify the code needed to implement AES.  Aside from using the built-ins and implementing key expansion as described by Intel\cite{intel}, the only optimization is manual loop unrolling.
 
 \section{Results}
 
 \begin{figure}[H]
  \begin{center}
   \includegraphics[width=\textwidth]{results_laptop.png}
-  \label{plot_laptop}
   \caption{Runtime growth for all AES implementations on a laptop}
+  \label{plot_laptop}
  \end{center}
 \end{figure}
 
 \begin{figure}[H]
  \begin{center}
   \includegraphics[width=\textwidth]{results_aws.png}
+  \caption{Runtime growth for all AES implementations on an AWS server}
   \label{plot_aws}
-  \caption{Runtime growth for all AES implementations on a laptop}
  \end{center}
 \end{figure}
 
 After executing all of the implementations several times on a range of file sizes, the average runtime for each implementation/size combination was plotted for both configurations.  Note that software-only and hardware-accelerated implementations were run using 4 simultaneous CPU threads.
 
 \subsection{Analysis for Both Configurations}
-In general, all implementations have linear runtime growth.  The algorithm for encrypting a single block is not influenced at all by the number of blocks, the data in the blocks, or the key.  Therefore, the algorithm's execution time should grow linearly with the number of blocks.
+
+
+Figures \ref{plot_laptop} and \ref{plot_aws} show the performance of the four AES implementations on two hardware and software environments. In general, all implementations have linear runtime growth.  The algorithm for encrypting a single block is not influenced at all by the number of blocks, the data in the blocks, or the key.  Therefore, the algorithm's execution time should grow linearly with the number of blocks.
 
 At small file sizes, the execution time does not change significantly as the file size increases.  This is because there are overhead costs to running these benchmarks.  All of these programs open/mmap two files (and later munmap/close them) and they derive the AES key schedule at runtime.  The pure C, AES-NI accelerated C, and libgcrypt implementations spawn pthreads, and the OpenCL program makes calls to gain access to the GPU and loads the AES algorithm onto it.  These operations should take the same amount of time to execute regardless of the file size, and with short execution times, the constant overhead dominates the expected linear runtime growth.
 
@@ -327,15 +333,13 @@ In both configurations, the libgcrypt implementation performs nearly identically
 
 \subsection{Observations for the Laptop Configuration}
 
-With the laptop's hardware/software setup, AES-NI is clearly the best performing program beginning at the 16KB  file size.  The GPU code has substantial overhead which limits its usefulness for small files, but it slightly outperforms the software-only program for sizes ranging from 2MB through 2GB. For the 4GB and 8GB file sizes, and the GPU-accelerated code is slightly slower than the software-only version.  This is likely due to the limited GPU memory on this device.
+Per Figure \ref{plot_laptop}, with the laptop's hardware/software setup, AES-NI is clearly the best performing program beginning at the 16KB  file size.  The GPU code has substantial overhead which limits its usefulness for small files, but it slightly outperforms the software-only program for sizes ranging from 2MB through 2GB. For the 4GB and 8GB file sizes, and the GPU-accelerated code is slightly slower than the software-only version.  This is likely due to the limited GPU memory on this device.
 
 \subsection{Observations for the AWS Server Configuration}
 
-Using the AWS server, the AES-NI accelerated implementation is the fastest for files below 128MB.  Beyond that point, the OpenCL version of the program is performance-competitive with the AES-NI application.  The pure software implementation is still generally the slowest (with the exception of small file sizes, where OpenCL's overhead dominates runtime).  However, the software-only version performs much more similarly to the AES-NI algorithm on the AWS server than it does on the laptop.  This is likely due to the availability of 512-bit vector instructions on the AWS machine's CPU, as well as other instruction optimizations made between Broadwell and Cascade Lake.
+Using the AWS server, the AES-NI accelerated implementation is the fastest for files below 128MB as shown in Figure \ref{plot_aws}.  Beyond that point, the OpenCL version of the program is performance-competitive with the AES-NI application.  The pure software implementation is still generally the slowest (with the exception of small file sizes, where OpenCL's overhead dominates runtime).  However, the software-only version performs much more similarly to the AES-NI algorithm on the AWS server than it does on the laptop.  This is likely due to the availability of 512-bit vector instructions on the AWS machine's CPU, as well as other instruction optimizations made between Broadwell and Cascade Lake.
 
 There is a strange dropoff in runtime between the 1GB and 2GB file sizes.  This occurred for all implementations, and may be a consequence of filesystem or network configuration on Amazon's servers.
-
-% TODO - update
 
 \section{Code Description}
 
@@ -376,6 +380,5 @@ Additionally, the implementations presented here may be vulnerable to side-chann
 
 \bibliographystyle{ieeetr}
 \bibliography{aes}
-
 
 \end{document}
